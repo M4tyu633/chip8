@@ -145,9 +145,15 @@ into the `.data` file, so the page works with no network requests after load.
 
 ### Tests
 
+The core, the tests and the headless runner do not need Raylib, so configure
+with the front end off and nothing is fetched or linked against a window
+system. This is how CI builds them, on a runner with no GPU and no X11
+headers.
+
 ```bash
-cmake --build build --target chip8_tests
-./build/chip8_tests
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DCHIP8_BUILD_FRONTEND=OFF
+cmake --build build
+ctest --test-dir build --output-on-failure
 ```
 
 The suite concentrates on the parts that are genuinely easy to get wrong:

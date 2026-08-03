@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/Users/matth/chip8/build-coreonly/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

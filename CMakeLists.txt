@@ -34,6 +34,17 @@ add_executable(render_rom tools/render_rom.cpp)
 target_link_libraries(render_rom PRIVATE chip8_core)
 
 # --- the Raylib frontend -----------------------------------------------------
+# Off-switch rather than an always-on dependency, because FetchContent runs at
+# configure time: without it, merely configuring the project pulls in Raylib
+# and, on Linux, fails outright on a machine with no X11 development headers.
+# The core and its tests genuinely do not need any of that, and CI builds them
+# with this OFF.
+option(CHIP8_BUILD_FRONTEND "Build the Raylib window and debugger" ON)
+
+if(NOT CHIP8_BUILD_FRONTEND)
+  message(STATUS "Raylib frontend disabled; building the core and tools only")
+  return()
+endif()
 
 include(FetchContent)
 set(FETCHCONTENT_QUIET OFF)

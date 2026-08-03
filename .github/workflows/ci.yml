@@ -20,9 +20,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # CHIP8_BUILD_FRONTEND=OFF keeps Raylib out of the configure step, so
+      # this job needs no X11 headers and no GPU.
       - name: Build the core, the tests and the headless runner
         run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCHIP8_BUILD_FRONTEND=OFF
           cmake --build build --config Release --target chip8_tests render_rom
 
       - name: Run the unit tests
