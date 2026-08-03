@@ -1,6 +1,0 @@
-C:/Users/matth/chip8/build-coreonly/CMakeFiles/chip8_core.dir
-C:/Users/matth/chip8/build-coreonly/CMakeFiles/chip8_tests.dir
-C:/Users/matth/chip8/build-coreonly/CMakeFiles/render_rom.dir
-C:/Users/matth/chip8/build-coreonly/CMakeFiles/test.dir
-C:/Users/matth/chip8/build-coreonly/CMakeFiles/edit_cache.dir
-C:/Users/matth/chip8/build-coreonly/CMakeFiles/rebuild_cache.dir

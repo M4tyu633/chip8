@@ -1,7 +1,0 @@
-# ninja log v7
-60	1828	8074822585133080	CMakeFiles/render_rom.dir/tools/render_rom.cpp.o	391447bf3bc4047f
-54	2186	8074822585073116	CMakeFiles/chip8_tests.dir/tests/test_chip8.cpp.o	f1b9d73e61c71e7e
-45	2396	8074822584980421	CMakeFiles/chip8_core.dir/src/chip8.cpp.o	f082faec6dc381b6
-2397	2893	8074822608501390	libchip8_core.a	ce6cddacf506db78
-2893	7074	8074822613457264	chip8_tests.js	d0d15f30c66a23c3
-2906	8130	8074822613598126	render_rom.js	2a0cec211c3a5534

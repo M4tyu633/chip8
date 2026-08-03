@@ -1,5 +1,5 @@
 build/
-build-web/
+build-*/
 build_tmp/
 web-dist/
 .vercel/
