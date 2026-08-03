@@ -26,18 +26,26 @@ constexpr int kScreenWidth = 1280;
 constexpr int kScreenHeight = 720;
 
 // The emulated display, drawn at an integer scale so pixels stay square and
-// crisp. 64 x 17 = 1088 is too wide next to the panel, so 14 it is.
-constexpr int kPixelScale = 14;
+// crisp. 12 rather than 14: the four rows of disassembly that buys are worth
+// more than the extra 128 pixels of a screen that is only 64 wide to begin
+// with.
+constexpr int kPixelScale = 11;
 constexpr int kDisplayX = 16;
 constexpr int kDisplayY = 16;
-constexpr int kDisplayW = chip8::kDisplayWidth * kPixelScale;   // 896
-constexpr int kDisplayH = chip8::kDisplayHeight * kPixelScale;  // 448
+constexpr int kDisplayW = chip8::kDisplayWidth * kPixelScale;   // 704
+constexpr int kDisplayH = chip8::kDisplayHeight * kPixelScale;  // 352
 
-constexpr int kPanelX = kDisplayX + kDisplayW + 16;  // 928
-constexpr int kPanelW = kScreenWidth - kPanelX - 16;  // 336
+constexpr int kPanelX = kDisplayX + kDisplayW + 16;   // 736
+constexpr int kPanelW = kScreenWidth - kPanelX - 16;  // 528
 
-constexpr int kDisasmY = kDisplayY + kDisplayH + 14;  // 478
+constexpr int kDisasmY = kDisplayY + kDisplayH + 14;  // 382
 constexpr int kDisasmH = kScreenHeight - kDisasmY - 16;
+constexpr int kDisasmRowH = 16;
+constexpr int kDisasmHeaderH = 28;
+// 18 rows, so 36 bytes of code are visible at once. Worth sizing deliberately:
+// a loop shorter than the window settles into it and then stops moving, and
+// most CHIP-8 inner loops are well under 36 bytes.
+constexpr int kDisasmRows = (kDisasmH - kDisasmHeaderH - 6) / kDisasmRowH;
 
 // Cycles per frame. The original ran around 500-700 instructions a second at
 // 60 Hz; 11 per frame is the usual default and what the bundled ROMs assume.
@@ -81,6 +89,12 @@ struct App {
 
   bool paused = false;
   bool rom_loaded = false;
+
+  // Address at the top of the disassembly listing. Held across frames rather
+  // than derived from the PC, so the listing stays put and only the highlight
+  // moves. Recentring every frame made the whole thing jitter, which is
+  // useless for actually reading the code.
+  int disasm_top = chip8::kProgramStart;
   int speed = kDefaultSpeed;
   std::string rom_name = "no ROM";
   std::string status;
@@ -169,6 +183,7 @@ void LoadRomAt(int index) {
     g_app.rom_name = GetFileName(path.c_str());
     g_app.prev_v = g_app.cpu.v();
     g_app.v_flash.fill(0.0f);
+    g_app.disasm_top = chip8::kProgramStart;
     SetStatus("loaded " + g_app.rom_name);
   } else {
     SetStatus("could not load that ROM");
@@ -272,38 +287,53 @@ void DrawDisplayPanel() {
 
 void DrawDisassembly() {
   DrawRectangle(kDisplayX - 2, kDisasmY, kDisplayW + 4, kDisasmH, kPanelBg);
-  DrawText_("DISASSEMBLY", kDisplayX + 10, kDisasmY + 8, 14, kDim);
+  DrawText_("DISASSEMBLY", kDisplayX + 10, kDisasmY + 7, 14, kDim);
 
-  // Centre the listing on the PC. CHIP-8 instructions are a fixed two bytes,
-  // so unlike a variable-length ISA the listing can simply be walked
-  // backwards from the PC without guessing where instructions start.
-  const int rows = (kDisasmH - 34) / 18;
-  const int before = rows / 2;
-  int address = static_cast<int>(g_app.cpu.pc()) - before * 2;
-  if (address < 0) address = 0;
+  // CHIP-8 instructions are a fixed two bytes, so unlike a variable-length ISA
+  // the listing can be walked from any even address without guessing where
+  // instructions start.
+  const int pc = static_cast<int>(g_app.cpu.pc());
+  const int span = kDisasmRows * 2;
 
-  for (int row = 0; row < rows; ++row) {
-    const int at = address + row * 2;
+  // Scroll by the minimum needed to bring the PC back into view, rather than
+  // recentring on it. Recentring looks reasonable for a single step and is
+  // unreadable in a loop: the window would be repositioned relative to
+  // wherever the PC happened to leave, so a loop spanning most of the window
+  // makes it lurch back and forth every iteration. Scrolling minimally means a
+  // loop shorter than the window drags the view along once and then sits
+  // still, which is what you actually want to read.
+  if (pc < g_app.disasm_top) {
+    g_app.disasm_top = pc - 2;
+  } else if (pc >= g_app.disasm_top + span) {
+    g_app.disasm_top = pc - span + 4;
+  }
+
+  // Clamp to the addressable range, keeping the top on an even address so the
+  // listing stays aligned to instruction boundaries.
+  const int max_top = chip8::kMemorySize - span;
+  g_app.disasm_top = std::max(0, std::min(g_app.disasm_top, max_top)) & ~1;
+
+  for (int row = 0; row < kDisasmRows; ++row) {
+    const int at = g_app.disasm_top + row * 2;
     if (at < 0 || at + 1 >= chip8::kMemorySize) continue;
 
     const std::uint16_t opcode =
         static_cast<std::uint16_t>((g_app.cpu.memory()[at] << 8) |
                                    g_app.cpu.memory()[at + 1]);
-    const bool current = at == static_cast<int>(g_app.cpu.pc());
-    const int y = kDisasmY + 30 + row * 18;
+    const bool current = at == pc;
+    const int y = kDisasmY + kDisasmHeaderH + row * kDisasmRowH;
 
     if (current) {
-      DrawRectangle(kDisplayX + 4, y - 2, kDisplayW - 8, 18,
-                    Color{126, 231, 195, 28});
+      DrawRectangle(kDisplayX + 4, y - 2, kDisplayW - 8, kDisasmRowH,
+                    Color{126, 231, 195, 32});
       DrawText_(">", kDisplayX + 10, y, 15, kAccent);
     }
 
-    const Color colour = current ? kAccent : kDim;
-    DrawText_(Hex(at, 3), kDisplayX + 28, y, 15, colour);
+    DrawText_(Hex(at, 3), kDisplayX + 28, y, 15, current ? kAccent : kDim);
     DrawText_(Hex(opcode, 4), kDisplayX + 84, y, 15,
-              current ? kAccent : kText);
+              current ? kAccent : kDim);
     DrawText_(chip8::Chip8::Disassemble(opcode), kDisplayX + 150, y, 15,
-              colour);
+              current ? kAccent : kText);
   }
 }
 
@@ -506,6 +536,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE void LoadRomFromMemory(const std::uint8_t* data,
     g_app.rom_name = name != nullptr ? name : "uploaded ROM";
     g_app.prev_v = g_app.cpu.v();
     g_app.v_flash.fill(0.0f);
+    g_app.disasm_top = chip8::kProgramStart;
     SetStatus("loaded " + g_app.rom_name);
     UploadDisplay();
   } else {
@@ -547,7 +578,10 @@ int main(int argc, char** argv) {
     g_app.audio_ready = true;
   }
 
-  g_app.rom_paths = {"roms/bounce.ch8", "roms/counter.ch8", "roms/keypad.ch8"};
+  // Games first, so the emulator opens on something playable rather than on a
+  // demo that only animates. TAB cycles in this order.
+  g_app.rom_paths = {"roms/brix.ch8",   "roms/pong.ch8",    "roms/catch.ch8",
+                     "roms/bounce.ch8", "roms/counter.ch8", "roms/keypad.ch8"};
 
   if (argc > 1) {
     if (g_app.cpu.LoadRomFile(argv[1])) {
