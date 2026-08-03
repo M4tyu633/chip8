@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # The core and its tests have no Raylib dependency, so this job needs no
+  # display, no GPU and no system packages beyond a compiler.
+  core:
+    name: Core tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the core, the tests and the headless runner
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release --target chip8_tests render_rom
+
+      - name: Run the unit tests
+        run: ctest --test-dir build --build-config Release --output-on-failure
+
+      # A ROM that halts or draws nothing is a regression the unit tests would
+      # not catch, since they never run a whole program end to end.
+      - name: Smoke test the bundled ROMs
+        shell: bash
+        run: |
+          BIN=build/render_rom
+          [ -f build/Release/render_rom.exe ] && BIN=build/Release/render_rom.exe
+          "$BIN" roms/bounce.ch8 41 11
+          "$BIN" roms/counter.ch8 400 11
+
+  rom-sources:
+    name: ROMs match their source
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Catches a committed .ch8 that was edited by hand, or an .asm change
+      # that was never reassembled.
+      - name: Reassemble and diff
+        run: |
+          for name in bounce counter keypad; do
+            python tools/assemble.py "roms/src/$name.asm" "/tmp/$name.ch8"
+            cmp "roms/$name.ch8" "/tmp/$name.ch8"
+          done
+
+  web:
+    name: WebAssembly build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+
+      - name: Build
+        run: |
+          emcmake cmake -B build-web -DPLATFORM=Web -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-web --target chip8
+
+      - name: Check the expected artifacts exist
+        run: |
+          for f in index.html index.js index.wasm index.data; do
+            test -s "build-web/$f" || { echo "missing or empty: $f"; exit 1; }
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: |
+            build-web/index.html
+            build-web/index.js
+            build-web/index.wasm
+            build-web/index.data

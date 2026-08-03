@@ -1,0 +1,22 @@
+build/
+build-web/
+build_tmp/
+web-dist/
+.vercel/
+
+*.o
+*.obj
+*.exe
+*.pdb
+*.ilk
+*.wasm
+*.data
+!roms/*.ch8
+
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# local editor/preview config
+.claude/

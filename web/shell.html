@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CHIP-8 Emulator and Debugger</title>
+    <meta
+      name="description"
+      content="A CHIP-8 emulator written from scratch in C++ with a Raylib visual debugger, compiled to WebAssembly."
+    />
+    <style>
+      :root {
+        --bg: #0e1117;
+        --panel: #141821;
+        --line: #1c212d;
+        --text: #c6d0e0;
+        --dim: #6e7a91;
+        --accent: #7ee7c3;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 24px 16px 40px;
+        background: var(--bg);
+        color: var(--text);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        min-height: 100vh;
+      }
+
+      header {
+        text-align: center;
+        max-width: 900px;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 20px;
+        letter-spacing: 0.04em;
+        color: var(--accent);
+      }
+
+      header p {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.6;
+        color: var(--dim);
+      }
+
+      /* The canvas is a fixed 1280x720 internally. Scaling it with CSS keeps
+         the emulated pixels square on any screen without the C++ side needing
+         to know the window size. */
+      #frame {
+        width: 100%;
+        max-width: 1280px;
+        aspect-ratio: 16 / 9;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        overflow: hidden;
+        position: relative;
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        outline: none;
+        image-rendering: pixelated;
+      }
+
+      #loading {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-size: 14px;
+        color: var(--dim);
+        background: var(--panel);
+        transition: opacity 0.3s;
+      }
+
+      #loading.done {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: center;
+        align-items: center;
+      }
+
+      button,
+      label.file {
+        font: inherit;
+        font-size: 13px;
+        padding: 8px 16px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--text);
+        cursor: pointer;
+        transition: border-color 0.15s, color 0.15s;
+      }
+
+      button:hover,
+      label.file:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      input[type="file"] {
+        display: none;
+      }
+
+      .keys {
+        font-size: 12px;
+        color: var(--dim);
+        text-align: center;
+        line-height: 1.8;
+        max-width: 760px;
+      }
+
+      .keys code {
+        color: var(--text);
+        background: var(--panel);
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+
+      footer {
+        font-size: 12px;
+        color: var(--dim);
+      }
+
+      footer a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+    </style>
+  </head>
+
+  <body>
+    <header>
+      <h1>CHIP-8 &mdash; emulator and debugger</h1>
+      <p>
+        Written from scratch in C++ with a Raylib front end, compiled to
+        WebAssembly. The panel on the right is live machine state: registers,
+        stack, the bytes around I, and a disassembly that follows the program
+        counter.
+      </p>
+    </header>
+
+    <div id="frame">
+      <canvas
+        id="canvas"
+        width="1280"
+        height="720"
+        tabindex="0"
+        oncontextmenu="event.preventDefault()"
+      ></canvas>
+      <div id="loading">loading WebAssembly&hellip;</div>
+    </div>
+
+    <div class="controls">
+      <button id="btn-pause" type="button">Pause / resume</button>
+      <button id="btn-next" type="button">Next ROM</button>
+      <button id="btn-reset" type="button">Reset</button>
+      <label class="file">
+        Load a .ch8 file
+        <input id="rom-input" type="file" accept=".ch8,.c8,.rom,application/octet-stream" />
+      </label>
+    </div>
+
+    <p class="keys">
+      Click the canvas first so it takes the keyboard. The 16-key pad maps to
+      <code>1 2 3 4</code> <code>Q W E R</code> <code>A S D F</code>
+      <code>Z X C V</code>. <code>Space</code> pauses, <code>N</code> single
+      steps while paused, <code>Tab</code> cycles the bundled ROMs,
+      <code>Backspace</code> resets, <code>[</code> and <code>]</code> change
+      speed, and <code>F1</code>&ndash;<code>F5</code> toggle the hardware
+      quirks.
+    </p>
+
+    <footer>Built by Matthew Labrador</footer>
+
+    <script>
+      const canvas = document.getElementById("canvas");
+
+      // Emscripten looks for this object. Keeping the keyboard scoped to the
+      // canvas stops Space and the arrow keys from scrolling the page while
+      // the emulator has focus.
+      var Module = {
+        canvas: canvas,
+        preRun: [],
+        postRun: [
+          function () {
+            document.getElementById("loading").classList.add("done");
+            canvas.focus();
+          },
+        ],
+        print: function (text) {
+          console.log(text);
+        },
+        printErr: function (text) {
+          console.error(text);
+        },
+      };
+
+      // Tab and Space would otherwise move focus and scroll the page. The
+      // emulator wants both.
+      canvas.addEventListener("keydown", function (event) {
+        if ([" ", "Tab", "Backspace"].includes(event.key)) {
+          event.preventDefault();
+        }
+      });
+      canvas.addEventListener("click", function () {
+        canvas.focus();
+      });
+
+      function command(id) {
+        if (typeof Module._UiCommand !== "function") return;
+        Module._UiCommand(id);
+        canvas.focus();
+      }
+
+      document.getElementById("btn-pause").onclick = () => command(0);
+      document.getElementById("btn-next").onclick = () => command(1);
+      document.getElementById("btn-reset").onclick = () => command(2);
+
+      document
+        .getElementById("rom-input")
+        .addEventListener("change", function (event) {
+          const file = event.target.files && event.target.files[0];
+          if (!file) return;
+
+          const reader = new FileReader();
+          reader.onload = function () {
+            const bytes = new Uint8Array(reader.result);
+
+            // The ROM has to live in the WASM heap for the C++ side to read
+            // it, so copy it across and free the block once the core has
+            // taken its own copy.
+            const romPtr = Module._malloc(bytes.length);
+            Module.HEAPU8.set(bytes, romPtr);
+
+            // The terminator is written as a byte rather than being embedded
+            // in the string: Emscripten minifies this shell, and a literal
+            // "\0" in the source survives only as a raw NUL character.
+            const nameBytes = new TextEncoder().encode(file.name);
+            const namePtr = Module._malloc(nameBytes.length + 1);
+            Module.HEAPU8.set(nameBytes, namePtr);
+            Module.HEAPU8[namePtr + nameBytes.length] = 0;
+
+            Module._LoadRomFromMemory(romPtr, bytes.length, namePtr);
+
+            Module._free(romPtr);
+            Module._free(namePtr);
+            canvas.focus();
+          };
+          reader.readAsArrayBuffer(file);
+        });
+    </script>
+
+    {{{ SCRIPT }}}
+  </body>
+</html>
