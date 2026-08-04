@@ -47,6 +47,14 @@ constexpr int kDisasmHeaderH = 28;
 // most CHIP-8 inner loops are well under 36 bytes.
 constexpr int kDisasmRows = (kDisasmH - kDisasmHeaderH - 6) / kDisasmRowH;
 
+// The disassembly window is only allowed to move twice a second. See
+// UpdateDisasmWindow for why it needs a speed limit at all.
+constexpr int kDisasmSettle = 30;
+// Per-frame decay on the execution histogram. 0.94 is a half-life of about
+// eleven frames: long enough that a subroutine entered every other frame stays
+// lit, short enough that the listing follows a ROM that changes phase.
+constexpr float kHeatDecay = 0.94f;
+
 // Cycles per frame. The original ran around 500-700 instructions a second at
 // 60 Hz; 11 per frame is the usual default and what the bundled ROMs assume.
 constexpr int kDefaultSpeed = 11;
@@ -90,11 +98,15 @@ struct App {
   bool paused = false;
   bool rom_loaded = false;
 
-  // Address at the top of the disassembly listing. Held across frames rather
-  // than derived from the PC, so the listing stays put and only the highlight
-  // moves. Recentring every frame made the whole thing jitter, which is
-  // useless for actually reading the code.
+  // Address at the top of the disassembly listing, held across frames.
   int disasm_top = chip8::kProgramStart;
+  // Frames since the window was last allowed to move.
+  int disasm_settle = 0;
+  // Decaying count of how often each address has been executed recently. Both
+  // the window's resting place and the per-row highlight are read off this
+  // rather than off the current PC.
+  std::array<float, chip8::kMemorySize> heat{};
+
   int speed = kDefaultSpeed;
   std::string rom_name = "no ROM";
   std::string status;
@@ -184,6 +196,8 @@ void LoadRomAt(int index) {
     g_app.prev_v = g_app.cpu.v();
     g_app.v_flash.fill(0.0f);
     g_app.disasm_top = chip8::kProgramStart;
+    g_app.disasm_settle = 0;
+    g_app.heat.fill(0.0f);
     SetStatus("loaded " + g_app.rom_name);
   } else {
     SetStatus("could not load that ROM");
@@ -285,6 +299,69 @@ void DrawDisplayPanel() {
   }
 }
 
+// Decide where the disassembly listing sits. Called once a frame, before the
+// panel is drawn.
+//
+// Following the PC directly is the obvious thing and it does not work while a
+// ROM is running. A single frame's eleven instructions are scattered across
+// the main loop, every subroutine it calls, and whatever busy-wait it is
+// parked in, so "scroll to wherever the PC happened to stop" picks a different
+// one of those regions on almost every frame. Brix rewrites the whole listing
+// on 110 frames out of 139 that way - eighteen rows of text swapping content
+// about fifteen times a second, which reads as a flicker and cannot be read at
+// all.
+//
+// So while it runs, the window is parked over the busiest stretch of code
+// instead, measured from the decaying execution histogram, and it is allowed
+// to move at most twice a second. Over fifteen seconds of play that settles to
+// three moves for Brix and one each for Pong and Catch.
+void UpdateDisasmWindow() {
+  const int span = kDisasmRows * 2;
+  const int max_top = chip8::kMemorySize - span;
+
+  // Paused is the only time the PC sits still long enough to be worth
+  // following, and single-stepping is the only time following it is what you
+  // actually want. Scroll by the minimum needed to bring it back into view
+  // rather than recentring, so stepping through a loop does not lurch.
+  if (g_app.paused || !g_app.rom_loaded) {
+    const int pc = static_cast<int>(g_app.cpu.pc());
+    if (pc < g_app.disasm_top) {
+      g_app.disasm_top = pc - 2;
+    } else if (pc >= g_app.disasm_top + span) {
+      g_app.disasm_top = pc - span + 4;
+    }
+    g_app.disasm_top = std::max(0, std::min(g_app.disasm_top, max_top)) & ~1;
+    g_app.disasm_settle = 0;
+    return;
+  }
+
+  if (++g_app.disasm_settle < kDisasmSettle) return;
+  g_app.disasm_settle = 0;
+
+  float current = 0.0f;
+  for (int i = 0; i < span; ++i) current += g_app.heat[g_app.disasm_top + i];
+
+  // Sliding window sum: each candidate start costs one add and one subtract
+  // off the previous one rather than a fresh pass over the span.
+  float running = 0.0f;
+  for (int i = 0; i < span; ++i) running += g_app.heat[chip8::kProgramStart + i];
+  float best_weight = running;
+  int best_top = chip8::kProgramStart;
+  for (int top = chip8::kProgramStart + 2; top <= max_top; top += 2) {
+    running += g_app.heat[top + span - 2] + g_app.heat[top + span - 1];
+    running -= g_app.heat[top - 2] + g_app.heat[top - 1];
+    if (running > best_weight) {
+      best_weight = running;
+      best_top = top;
+    }
+  }
+
+  // The margin is the part that matters. Two stretches of a game loop are
+  // often executed about equally often, and without it the listing would swap
+  // between them every half second forever.
+  if (best_weight > current * 1.5f + 1.0f) g_app.disasm_top = best_top;
+}
+
 void DrawDisassembly() {
   DrawRectangle(kDisplayX - 2, kDisasmY, kDisplayW + 4, kDisasmH, kPanelBg);
   DrawText_("DISASSEMBLY", kDisplayX + 10, kDisasmY + 7, 14, kDim);
@@ -293,25 +370,6 @@ void DrawDisassembly() {
   // the listing can be walked from any even address without guessing where
   // instructions start.
   const int pc = static_cast<int>(g_app.cpu.pc());
-  const int span = kDisasmRows * 2;
-
-  // Scroll by the minimum needed to bring the PC back into view, rather than
-  // recentring on it. Recentring looks reasonable for a single step and is
-  // unreadable in a loop: the window would be repositioned relative to
-  // wherever the PC happened to leave, so a loop spanning most of the window
-  // makes it lurch back and forth every iteration. Scrolling minimally means a
-  // loop shorter than the window drags the view along once and then sits
-  // still, which is what you actually want to read.
-  if (pc < g_app.disasm_top) {
-    g_app.disasm_top = pc - 2;
-  } else if (pc >= g_app.disasm_top + span) {
-    g_app.disasm_top = pc - span + 4;
-  }
-
-  // Clamp to the addressable range, keeping the top on an even address so the
-  // listing stays aligned to instruction boundaries.
-  const int max_top = chip8::kMemorySize - span;
-  g_app.disasm_top = std::max(0, std::min(g_app.disasm_top, max_top)) & ~1;
 
   for (int row = 0; row < kDisasmRows; ++row) {
     const int at = g_app.disasm_top + row * 2;
@@ -323,17 +381,32 @@ void DrawDisassembly() {
     const bool current = at == pc;
     const int y = kDisasmY + kDisasmHeaderH + row * kDisasmRowH;
 
+    // Recent execution as a background wash. Taken from the decaying
+    // histogram rather than from "was this run last frame", because the latter
+    // is a per-frame boolean and would blink at 60 Hz - the same problem the
+    // window itself had.
+    const float hot = g_app.heat[at];
+    if (hot > 0.05f) {
+      const auto alpha =
+          static_cast<unsigned char>(std::min(26.0f, 3.0f + hot * 2.0f));
+      DrawRectangle(kDisplayX + 4, y - 2, kDisplayW - 8, kDisasmRowH,
+                    Color{126, 231, 195, alpha});
+    }
+
     if (current) {
       DrawRectangle(kDisplayX + 4, y - 2, kDisplayW - 8, kDisasmRowH,
                     Color{126, 231, 195, 32});
       DrawText_(">", kDisplayX + 10, y, 15, kAccent);
     }
 
-    DrawText_(Hex(at, 3), kDisplayX + 28, y, 15, current ? kAccent : kDim);
-    DrawText_(Hex(opcode, 4), kDisplayX + 84, y, 15,
-              current ? kAccent : kDim);
+    // Only recolour the whole row when paused. While running the PC lands on a
+    // different row every frame, and repainting a row in the accent colour at
+    // that rate is the flicker again in miniature.
+    const bool lit = current && g_app.paused;
+    DrawText_(Hex(at, 3), kDisplayX + 28, y, 15, lit ? kAccent : kDim);
+    DrawText_(Hex(opcode, 4), kDisplayX + 84, y, 15, lit ? kAccent : kDim);
     DrawText_(chip8::Chip8::Disassemble(opcode), kDisplayX + 150, y, 15,
-              current ? kAccent : kText);
+              lit ? kAccent : kText);
   }
 }
 
@@ -472,6 +545,27 @@ void DrawHelpBar() {
   DrawText_(help, kDisplayX, kScreenHeight - 14, 13, kDim);
 }
 
+// Chip8::RunFrame already does this, but the debugger also needs to know which
+// addresses the frame executed, not just where it ended up, so the loop is
+// repeated here with the histogram folded in.
+void RunTracedFrame() {
+  for (float& hot : g_app.heat) hot *= kHeatDecay;
+
+  for (int i = 0; i < g_app.speed; ++i) {
+    g_app.heat[g_app.cpu.pc() & 0x0FFF] += 1.0f;
+
+    const chip8::StepResult result = g_app.cpu.Step();
+    // Same three dead ends RunFrame breaks on: nothing else this frame can
+    // make progress, so spending the rest of the budget would just burn it.
+    if (result == chip8::StepResult::kIllegalInstruction ||
+        result == chip8::StepResult::kWaitingForKey ||
+        result == chip8::StepResult::kWaitingForVBlank) {
+      break;
+    }
+  }
+  g_app.cpu.TickTimers();
+}
+
 void UpdateFrame() {
   const float dt = GetFrameTime();
 
@@ -479,7 +573,7 @@ void UpdateFrame() {
 
   if (!g_app.paused && g_app.rom_loaded) {
     g_app.prev_v = g_app.cpu.v();
-    g_app.cpu.RunFrame(g_app.speed);
+    RunTracedFrame();
 
     for (int i = 0; i < 16; ++i) {
       if (g_app.cpu.v()[i] != g_app.prev_v[i]) g_app.v_flash[i] = 0.35f;
@@ -504,6 +598,8 @@ void UpdateFrame() {
   }
 
   if (g_app.status_timer > 0.0f) g_app.status_timer -= dt;
+
+  UpdateDisasmWindow();
 
   BeginDrawing();
   ClearBackground(kBg);
@@ -537,6 +633,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE void LoadRomFromMemory(const std::uint8_t* data,
     g_app.prev_v = g_app.cpu.v();
     g_app.v_flash.fill(0.0f);
     g_app.disasm_top = chip8::kProgramStart;
+    g_app.disasm_settle = 0;
+    g_app.heat.fill(0.0f);
     SetStatus("loaded " + g_app.rom_name);
     UploadDisplay();
   } else {
@@ -559,7 +657,18 @@ extern "C" EMSCRIPTEN_KEEPALIVE void UiCommand(int command) {
 int main(int argc, char** argv) {
   SetTraceLogLevel(LOG_WARNING);
   InitWindow(kScreenWidth, kScreenHeight, "CHIP-8 - emulator and debugger");
+
+#ifndef __EMSCRIPTEN__
   SetTargetFPS(60);
+#else
+  // Deliberately no target on the web. requestAnimationFrame is already the
+  // clock, and asking raylib for one as well makes EndDrawing block in
+  // WaitTime until the 16.67 ms budget is used up - which is only ever after
+  // the browser's own next tick is due, so every second frame is missed and
+  // the loop settles at 30 Hz. The CHIP-8 delay timer ticks once a frame, so
+  // that halves the speed of every bundled ROM: Brix's ball crawls at 15
+  // pixels a second instead of 30 and the paddle feels unresponsive.
+#endif
 
   // The default font is a bitmap face that turns to mush at these sizes, so
   // ask for the built-in one at a size that stays legible.
