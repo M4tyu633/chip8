@@ -81,7 +81,11 @@ if(EMSCRIPTEN)
     -sSTACK_SIZE=1048576
     -sEXPORTED_FUNCTIONS=_main,_malloc,_free,_LoadRomFromMemory,_UiCommand
     -sEXPORTED_RUNTIME_METHODS=HEAPU8,ccall,cwrap
-    --preload-file ${CMAKE_CURRENT_SOURCE_DIR}/roms@/roms
+    # SHELL: on both, or CMake sees --preload-file twice, decides it is a
+    # repeated flag and drops the second one - which leaves the path after it
+    # sitting on the command line as though it were an input file.
+    "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/roms@/roms"
+    "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/assets@/assets"
     --shell-file ${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html
   )
   # Emscripten needs the ROMs present at link time for --preload-file.

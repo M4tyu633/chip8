@@ -123,38 +123,63 @@
         display: none;
       }
 
+      /* Everything past the controls line is folded away. The page used to
+         open on five panels of prose under an already-busy canvas, which is
+         its own kind of unreadable. */
       .guide {
         width: 100%;
-        max-width: 1280px;
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 16px;
+        max-width: 720px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
         margin-top: 8px;
       }
 
-      .card {
+      details {
         background: var(--panel);
         border: 1px solid var(--line);
         border-radius: 10px;
-        padding: 16px 18px;
       }
 
-      .card h2 {
-        margin: 0 0 12px;
+      summary {
+        padding: 13px 18px;
         font-size: 13px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--accent);
+        color: var(--text);
+        cursor: pointer;
+        list-style: none;
       }
 
-      .card p {
+      summary::-webkit-details-marker {
+        display: none;
+      }
+
+      summary::before {
+        content: "+";
+        color: var(--accent);
+        display: inline-block;
+        width: 18px;
+      }
+
+      details[open] summary::before {
+        content: "\2212";
+      }
+
+      details[open] summary {
+        border-bottom: 1px solid var(--line);
+      }
+
+      .body {
+        padding: 14px 18px 16px;
+      }
+
+      .body p {
         margin: 0 0 10px;
         font-size: 13px;
         line-height: 1.65;
         color: var(--dim);
       }
 
-      .card p:last-child {
+      .body p:last-child {
         margin-bottom: 0;
       }
 
@@ -237,6 +262,7 @@
       <button id="btn-pause" type="button">Pause / resume &middot; Space</button>
       <button id="btn-next" type="button">Next ROM &middot; Tab</button>
       <button id="btn-reset" type="button">Reset &middot; Backspace</button>
+      <button id="btn-debug" type="button">Show debugger &middot; H</button>
       <label class="file">
         Load a .ch8 file
         <input id="rom-input" type="file" accept=".ch8,.c8,.rom,application/octet-stream" />
@@ -249,87 +275,121 @@
     </p>
 
     <div class="guide">
-      <div class="card">
-        <h2>The six ROMs</h2>
-        <p>
-          <kbd>Tab</kbd> cycles through them. Every one is original, written by
-          hand in CHIP-8 assembly, with the commented source kept in
-          <code>roms/src/</code>.
-        </p>
-        <dl>
-          <dt><strong>Brix</strong></dt>
-          <dd>brick breaker &mdash; <kbd>A</kbd> <kbd>D</kbd> to move</dd>
-          <dt><strong>Pong</strong></dt>
-          <dd>
-            two players &mdash; <kbd>1</kbd> <kbd>Q</kbd> left,
-            <kbd>4</kbd> <kbd>R</kbd> right
-          </dd>
-          <dt><strong>Catch</strong></dt>
-          <dd>catch the falling blocks &mdash; <kbd>A</kbd> <kbd>D</kbd></dd>
-          <dt><strong>Bounce</strong></dt>
-          <dd>a bouncing ball, no input</dd>
-          <dt><strong>Counter</strong></dt>
-          <dd>counts 0&ndash;255 in decimal, no input</dd>
-          <dt><strong>Keypad</strong></dt>
-          <dd>press a key, see its hex digit</dd>
-        </dl>
-      </div>
+      <details>
+        <summary>The six ROMs, and what each one is</summary>
+        <div class="body">
+          <p>
+            <kbd>Tab</kbd> cycles through them, and the strip under the screen
+            always names the one you are on and its controls. Every one is
+            original, written by hand in CHIP-8 assembly, with the commented
+            source kept in <code>roms/src/</code>.
+          </p>
+          <dl>
+            <dt><strong>Brix</strong></dt>
+            <dd>brick breaker &mdash; <kbd>A</kbd> <kbd>D</kbd> to move</dd>
+            <dt><strong>Pong</strong></dt>
+            <dd>
+              two players &mdash; <kbd>1</kbd> <kbd>Q</kbd> left,
+              <kbd>4</kbd> <kbd>R</kbd> right
+            </dd>
+            <dt><strong>Catch</strong></dt>
+            <dd>catch the falling blocks &mdash; <kbd>A</kbd> <kbd>D</kbd></dd>
+            <dt><strong>Bounce</strong></dt>
+            <dd>a bouncing ball, no input</dd>
+            <dt><strong>Counter</strong></dt>
+            <dd>counts 0&ndash;255 in decimal, no input</dd>
+            <dt><strong>Keypad</strong></dt>
+            <dd>press a key, see its hex digit</dd>
+          </dl>
+        </div>
+      </details>
 
-      <div class="card">
-        <h2>Driving the debugger</h2>
-        <dl>
-          <dt><kbd>Space</kbd></dt>
-          <dd>pause and resume</dd>
-          <dt><kbd>N</kbd></dt>
-          <dd>run exactly one instruction, while paused</dd>
-          <dt><kbd>Tab</kbd></dt>
-          <dd>load the next bundled ROM</dd>
-          <dt><kbd>Backspace</kbd></dt>
-          <dd>restart the current ROM</dd>
-          <dt><kbd>[</kbd> <kbd>]</kbd></dt>
-          <dd>
-            instructions per frame &mdash; the emulator&rsquo;s clock speed,
-            11 by default
-          </dd>
-          <dt><kbd>F1</kbd>&ndash;<kbd>F5</kbd></dt>
-          <dd>
-            toggle the five hardware quirks that real CHIP-8 interpreters
-            disagree about: how shifts pick their operand, whether
-            <code>Fx55</code>/<code>Fx65</code> leave I moved, whether logic ops
-            clear VF, whether draws wait for vblank, and whether sprites clip or
-            wrap at the edges
-          </dd>
-        </dl>
-      </div>
+      <details>
+        <summary>What the debugger is for</summary>
+        <div class="body">
+          <p>
+            An emulator is a program pretending to be a computer, and normally
+            you only see what the pretend computer draws. Press <kbd>H</kbd> and
+            you see the pretend computer itself: what it is holding, where it is
+            up to, and which instruction it is about to run.
+          </p>
+          <p>
+            That is what makes a bug findable. When a sprite leaves a stuck
+            pixel behind, no amount of staring at the game says why &mdash; but
+            pausing on the frame it happens and stepping one instruction at a
+            time, with the registers next to you, does.
+          </p>
+          <p>None of it is needed to play. It starts folded away.</p>
+        </div>
+      </details>
 
-      <div class="card">
-        <h2>What you are looking at</h2>
-        <p>
-          <strong>Top left</strong> is the emulated 64&times;32 display, scaled
-          up 11&times;. The strip under it names the ROM and its controls.
-        </p>
-        <p>
-          <strong>Below that</strong> is a live disassembly. It parks over
-          whichever stretch of code is running hottest rather than chasing the
-          program counter, which at sixty frames a second is unreadable; the
-          green wash on a row means it ran recently. Pause and it follows the
-          program counter exactly, so <kbd>N</kbd> steps through line by line.
-        </p>
-        <p>
-          <strong>On the right</strong> is the machine itself: the sixteen V
-          registers (highlighted amber for a moment when written), the program
-          counter, index and timers, the call stack, the bytes around I, and the
-          keypad. Nothing there is cached &mdash; it is read straight out of the
-          interpreter each frame.
-        </p>
-        <p>
-          The keypad reads <em>CHIP-8 value / your key</em>. The original COSMAC
-          VIP had a 16-key hex pad laid out
-          <code>1 2 3 C / 4 5 6 D / 7 8 9 E / A 0 B F</code>, mapped here onto
-          the left block of a QWERTY keyboard &mdash; so pressing <kbd>A</kbd>
-          lights CHIP-8 key <code>7</code>.
-        </p>
-      </div>
+      <details>
+        <summary>Every key, and what each panel means</summary>
+        <div class="body">
+          <dl>
+            <dt><kbd>H</kbd></dt>
+            <dd>show or hide the debugger</dd>
+            <dt><kbd>Space</kbd></dt>
+            <dd>pause and resume</dd>
+            <dt><kbd>N</kbd></dt>
+            <dd>run exactly one instruction, while paused</dd>
+            <dt><kbd>Tab</kbd></dt>
+            <dd>load the next bundled ROM</dd>
+            <dt><kbd>Backspace</kbd></dt>
+            <dd>restart the current ROM</dd>
+            <dt><kbd>[</kbd> <kbd>]</kbd></dt>
+            <dd>
+              instructions per frame &mdash; the emulator&rsquo;s clock speed,
+              11 by default
+            </dd>
+            <dt><kbd>F1</kbd>&ndash;<kbd>F5</kbd></dt>
+            <dd>
+              toggle the five hardware quirks that real CHIP-8 interpreters
+              disagree about: how shifts pick their operand, whether
+              <code>Fx55</code>/<code>Fx65</code> leave I moved, whether logic
+              ops clear VF, whether draws wait for vblank, and whether sprites
+              clip or wrap at the edges
+            </dd>
+          </dl>
+          <p style="margin-top: 14px">With the debugger open:</p>
+          <dl>
+            <dt><strong>V0&ndash;VF</strong></dt>
+            <dd>
+              the sixteen registers, all the scratch space a program gets.
+              Flashes amber for a moment when one is written
+            </dd>
+            <dt><strong>PC</strong></dt>
+            <dd>which instruction is next</dd>
+            <dt><strong>I</strong></dt>
+            <dd>an address register, almost always aimed at a sprite</dd>
+            <dt><strong>SP</strong>, stack</dt>
+            <dd>how deep in subroutine calls the program is</dd>
+            <dt><strong>DT</strong>, <strong>ST</strong></dt>
+            <dd>
+              two countdowns ticking 60 times a second &mdash; the only clock a
+              ROM has, and how it paces itself. ST also drives the beep
+            </dd>
+            <dt><strong>Memory @ I</strong></dt>
+            <dd>the bytes I points at, usually the next sprite</dd>
+            <dt><strong>Disassembly</strong></dt>
+            <dd>
+              the program as instructions rather than hex. It parks over
+              whichever stretch is running hottest instead of chasing the
+              program counter, which at sixty frames a second is unreadable; a
+              green wash means a line ran recently. Pause and it follows the
+              program counter exactly, so <kbd>N</kbd> steps line by line
+            </dd>
+            <dt><strong>Keypad</strong></dt>
+            <dd>
+              reads <em>CHIP-8 value / your key</em>. The original COSMAC VIP
+              had a 16-key hex pad laid out
+              <code>1 2 3 C / 4 5 6 D / 7 8 9 E / A 0 B F</code>, mapped here
+              onto the left block of a QWERTY keyboard &mdash; so pressing
+              <kbd>A</kbd> lights CHIP-8 key <code>7</code>
+            </dd>
+          </dl>
+        </div>
+      </details>
     </div>
 
     <footer>Built by Matthew Labrador</footer>
@@ -377,6 +437,28 @@
       document.getElementById("btn-pause").onclick = () => command(0);
       document.getElementById("btn-next").onclick = () => command(1);
       document.getElementById("btn-reset").onclick = () => command(2);
+
+      // The button label tracks the state, so it always says what pressing it
+      // will do. H does the same thing from the keyboard, so the label is
+      // corrected on any keypress rather than only on a click.
+      const debugButton = document.getElementById("btn-debug");
+      // Matches the C++ side, which opens with the debugger folded away.
+      let debuggerShown = false;
+      function setDebugLabel() {
+        debugButton.textContent =
+          (debuggerShown ? "Hide debugger" : "Show debugger") + " · H";
+      }
+      debugButton.onclick = () => {
+        debuggerShown = !debuggerShown;
+        setDebugLabel();
+        command(3);
+      };
+      window.addEventListener("keydown", function (event) {
+        if (event.key === "h" || event.key === "H") {
+          debuggerShown = !debuggerShown;
+          setDebugLabel();
+        }
+      });
 
       document
         .getElementById("rom-input")

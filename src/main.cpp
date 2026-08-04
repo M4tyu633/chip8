@@ -43,6 +43,18 @@ constexpr int kPanelW = kScreenWidth - kPanelX - 16;  // 528
 constexpr int kHintY = kDisplayY + kDisplayH + 10;  // 378
 constexpr int kHintH = 30;
 
+// The glyph atlas is baked once at this size and scaled down for every size
+// actually drawn. Above the largest of those, so nothing is ever scaled up.
+constexpr int kFontAtlasSize = 48;
+
+// Focus mode: the debugger folded away and the game scaled up to fill the
+// canvas on its own. Still an integer scale, so the pixels stay square.
+constexpr int kFocusScale = 18;
+constexpr int kFocusW = chip8::kDisplayWidth * kFocusScale;   // 1152
+constexpr int kFocusH = chip8::kDisplayHeight * kFocusScale;  // 576
+constexpr int kFocusX = (kScreenWidth - kFocusW) / 2;         // 64
+constexpr int kFocusY = 26;
+
 constexpr int kDisasmY = kHintY + kHintH + 10;  // 418
 constexpr int kDisasmH = kScreenHeight - kDisasmY - 16;
 constexpr int kDisasmRowH = 16;
@@ -137,6 +149,11 @@ struct App {
 
   bool paused = false;
   bool rom_loaded = false;
+  // Starts folded away. Six panels of hex all updating at once is a lot to be
+  // handed unasked, none of it is needed to play, and being shown it before
+  // anything explains what it is reads as the thing being broken. H opens it,
+  // as does a button on the page.
+  bool show_debugger = false;
 
   // Address at the top of the disassembly listing, held across frames.
   int disasm_top = chip8::kProgramStart;
@@ -205,6 +222,22 @@ void DrawText_(const std::string& text, int x, int y, int size, Color color) {
   DrawTextEx(g_app.font, text.c_str(), Vector2{static_cast<float>(x),
                                                static_cast<float>(y)},
              static_cast<float>(size), 1.0f, color);
+}
+
+// Step a size down until the text fits the width it has been given.
+//
+// The help bar and the control strip are long strings whose length changes
+// with the ROM and the layout, and the default raylib font is wider than it
+// looks. Guessing at whether they fit runs text off the edge of the canvas,
+// which is invisible to every check that does not involve looking at it.
+int FitSize(const std::string& text, int width, int start, int minimum) {
+  for (int size = start; size > minimum; --size) {
+    const float measured =
+        MeasureTextEx(g_app.font, text.c_str(), static_cast<float>(size), 1.0f)
+            .x;
+    if (measured <= static_cast<float>(width)) return size;
+  }
+  return minimum;
 }
 
 std::string Hex(unsigned value, int digits) {
@@ -278,6 +311,13 @@ void HandleInput() {
   }
   if (IsKeyPressed(KEY_TAB)) LoadRomAt(g_app.rom_index + 1);
 
+  // H rather than a function key: F1 to F5 are the quirks already, and the
+  // browser claims several of the rest.
+  if (IsKeyPressed(KEY_H)) {
+    g_app.show_debugger = !g_app.show_debugger;
+    SetStatus(g_app.show_debugger ? "debugger shown" : "debugger hidden");
+  }
+
   // Quirk toggles, so a ROM written for a different interpreter can be made
   // to behave without recompiling.
   if (IsKeyPressed(KEY_F1)) {
@@ -326,22 +366,56 @@ void HandleInput() {
   }
 }
 
-void DrawDisplayPanel() {
-  DrawRectangle(kDisplayX - 2, kDisplayY - 2, kDisplayW + 4, kDisplayH + 4,
-                kGrid);
+// Where the game sits. Small and top-left with the debugger open, filling the
+// canvas with it folded away.
+struct Rect {
+  int x, y, w, h;
+};
+
+Rect DisplayRect() {
+  if (g_app.show_debugger) return {kDisplayX, kDisplayY, kDisplayW, kDisplayH};
+  return {kFocusX, kFocusY, kFocusW, kFocusH};
+}
+
+void DrawDisplayPanel(const Rect& at) {
+  DrawRectangle(at.x - 2, at.y - 2, at.w + 4, at.h + 4, kGrid);
   DrawTexturePro(g_app.screen,
                  Rectangle{0, 0, static_cast<float>(chip8::kDisplayWidth),
                            static_cast<float>(chip8::kDisplayHeight)},
-                 Rectangle{static_cast<float>(kDisplayX),
-                           static_cast<float>(kDisplayY),
-                           static_cast<float>(kDisplayW),
-                           static_cast<float>(kDisplayH)},
+                 Rectangle{static_cast<float>(at.x), static_cast<float>(at.y),
+                           static_cast<float>(at.w), static_cast<float>(at.h)},
                  Vector2{0, 0}, 0.0f, WHITE);
 
   if (!g_app.rom_loaded) {
     DrawText_("drop a .ch8 file here, or press TAB to cycle the bundled ROMs",
-              kDisplayX + 60, kDisplayY + kDisplayH / 2 - 8, 18, kDim);
+              at.x + 60, at.y + at.h / 2 - 8, 18, kDim);
   }
+}
+
+// The strip under the display: what is loaded, how to play it, and how to get
+// to the next one. Everything here was previously only in the surrounding HTML
+// page, where nobody found it.
+void DrawHintStrip(const Rect& display) {
+  const int y = display.y + display.h + 10;
+  DrawRectangle(display.x - 2, y, display.w + 4, kHintH, kPanelBg);
+
+  int x = display.x + 12;
+  DrawText_(g_app.rom_title, x, y + 8, 16, kAccent);
+  x += static_cast<int>(
+           MeasureTextEx(g_app.font, g_app.rom_title.c_str(), 16.0f, 1.0f).x) +
+       18;
+
+  // Right-aligned, so the ROM's own controls stay put as they change length.
+  const std::string cycle = "TAB  next ROM";
+  const int cycle_width =
+      static_cast<int>(MeasureTextEx(g_app.font, cycle.c_str(), 15.0f, 1.0f).x);
+  const int cycle_x = display.x + display.w - 12 - cycle_width;
+  DrawText_(cycle, cycle_x, y + 9, 15, kDim);
+
+  // Pong's controls name four keys and are much the longest, so the gap left
+  // between the title and TAB is what the size has to fit.
+  DrawText_(g_app.rom_controls, x, y + 9,
+            FitSize(g_app.rom_controls, cycle_x - 20 - x, 15, 10), kText);
 }
 
 // Decide where the disassembly listing sits. Called once a frame, before the
@@ -360,27 +434,6 @@ void DrawDisplayPanel() {
 // instead, measured from the decaying execution histogram, and it is allowed
 // to move at most twice a second. Over fifteen seconds of play that settles to
 // three moves for Brix and one each for Pong and Catch.
-// The strip under the display: what is loaded, how to play it, and how to get
-// to the next one. Everything here was previously only in the surrounding HTML
-// page, where nobody found it.
-void DrawHintStrip() {
-  DrawRectangle(kDisplayX - 2, kHintY, kDisplayW + 4, kHintH, kPanelBg);
-
-  int x = kDisplayX + 12;
-  DrawText_(g_app.rom_title, x, kHintY + 8, 16, kAccent);
-  x += static_cast<int>(MeasureTextEx(g_app.font, g_app.rom_title.c_str(), 16.0f,
-                                      1.0f)
-                            .x) +
-       18;
-  DrawText_(g_app.rom_controls, x, kHintY + 9, 15, kText);
-
-  // Right-aligned, so the ROM's own controls stay put as they change length.
-  const std::string cycle = "TAB  next ROM";
-  const int width =
-      static_cast<int>(MeasureTextEx(g_app.font, cycle.c_str(), 15.0f, 1.0f).x);
-  DrawText_(cycle, kDisplayX + kDisplayW - 12 - width, kHintY + 9, 15, kDim);
-}
-
 void UpdateDisasmWindow() {
   const int span = kDisasmRows * 2;
   const int max_top = chip8::kMemorySize - span;
@@ -617,11 +670,21 @@ void DrawHelpBar() {
   // The debugger's own controls. The ROM's controls are in the hint strip
   // directly under the display instead, because that is the one thing you need
   // before you have read anything at all.
+  //
+  // With the debugger folded away, most of this is about panels that are not
+  // on screen, so only the handful that still apply is listed.
+  // Kept terse. FitSize below will shrink anything longer until it fits, and
+  // at this width that means shrinking it past legible - the full wording for
+  // every one of these lives on the page around the canvas instead.
   const std::string help =
-      "SPACE pause    N step while paused    BACKSPACE reset    "
-      "[ ] instructions per frame    F1-F5 hardware quirks    "
-      "game keys 1234 / QWER / ASDF / ZXCV";
-  DrawText_(help, kDisplayX, kScreenHeight - 14, 13, kDim);
+      g_app.show_debugger
+          ? "H hide debugger   SPACE pause   N step   BACKSPACE reset   "
+            "[ ] speed   F1-F5 quirks   keys 1234/QWER/ASDF/ZXCV"
+          : "H show the debugger   SPACE pause   BACKSPACE reset   "
+            "keys 1234/QWER/ASDF/ZXCV";
+  const int x = g_app.show_debugger ? kDisplayX : kFocusX;
+  DrawText_(help, x, kScreenHeight - 14, FitSize(help, kScreenWidth - 2 * x, 13, 9),
+            kDim);
 }
 
 // Chip8::RunFrame already does this, but the debugger also needs to know which
@@ -678,19 +741,23 @@ void UpdateFrame() {
 
   if (g_app.status_timer > 0.0f) g_app.status_timer -= dt;
 
-  UpdateDisasmWindow();
+  if (g_app.show_debugger) UpdateDisasmWindow();
+
+  const Rect display = DisplayRect();
 
   BeginDrawing();
   ClearBackground(kBg);
 
-  DrawDisplayPanel();
-  DrawHintStrip();
-  DrawDisassembly();
-  DrawRegisterPanel();
+  DrawDisplayPanel(display);
+  DrawHintStrip(display);
+  if (g_app.show_debugger) {
+    DrawDisassembly();
+    DrawRegisterPanel();
+  }
   DrawHelpBar();
 
   if (g_app.status_timer > 0.0f) {
-    DrawText_(g_app.status, kDisplayX + 8, kDisplayY + kDisplayH - 26, 16,
+    DrawText_(g_app.status, display.x + 8, display.y + display.h - 26, 16,
               kWarn);
   }
 
@@ -731,6 +798,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE void UiCommand(int command) {
     case 0: g_app.paused = !g_app.paused; break;
     case 1: LoadRomAt(g_app.rom_index + 1); break;
     case 2: LoadRomAt(g_app.rom_index); break;  // reset the current ROM
+    case 3: g_app.show_debugger = !g_app.show_debugger; break;
     default: break;
   }
 }
@@ -752,9 +820,24 @@ int main(int argc, char** argv) {
   // pixels a second instead of 30 and the paddle feels unresponsive.
 #endif
 
-  // The default font is a bitmap face that turns to mush at these sizes, so
-  // ask for the built-in one at a size that stays legible.
-  g_app.font = GetFontDefault();
+  // Raylib's built-in font is a 10-pixel bitmap face. Everything here is drawn
+  // between 13 and 22 pixels, so every glyph was being stretched by a
+  // fractional amount over a point-filtered atlas - 1.3x, 1.5x, 1.6x - which
+  // is why the text looked smeared no matter what size it was asked for. There
+  // is no size that fixes it; the face has to be a real one.
+  //
+  // Baked at kFontAtlasSize, comfortably above the largest size drawn, so
+  // every size in use is scaling the atlas down rather than up. Bilinear
+  // because unlike the emulated display this is meant to be resampled.
+  g_app.font = LoadFontEx("assets/JetBrainsMono-Regular.ttf", kFontAtlasSize,
+                          nullptr, 0);
+  if (g_app.font.texture.id == 0) {
+    // Missing or unreadable: still better to run with bad text than not run.
+    g_app.font = GetFontDefault();
+    TraceLog(LOG_WARNING, "font not found, falling back to the built-in one");
+  } else {
+    SetTextureFilter(g_app.font.texture, TEXTURE_FILTER_BILINEAR);
+  }
 
   Image blank = GenImageColor(chip8::kDisplayWidth, chip8::kDisplayHeight,
                               kOffPixel);
