@@ -57,7 +57,13 @@ serve:
                         ; that first XOR would switch a pixel *on* and leave it
                         ; stuck there for the rest of the game
 
+; The paddle is polled twice for every step the ball takes. Moving both on the
+; same tick is the obvious loop and it plays badly: slowing the ball to
+; something you can react to slows the paddle with it, and a paddle that
+; crawls is worse than a fast ball. Two waits per iteration decouples them.
 game_loop:
+    CALL wait_tick
+    CALL move_paddle
     CALL wait_tick
     CALL move_paddle
     CALL move_ball
@@ -71,10 +77,11 @@ game_loop:
 ; Timing
 ; ---------------------------------------------------------------------------
 
-; One tick every two frames, giving the ball 30 pixels a second and the paddle
-; 60. Timed off the delay timer rather than the display-wait quirk, because
-; that quirk is one of the ones F1-F5 can switch off and the game should not
-; change speed when it does.
+; One tick every two frames. The game loop waits twice per iteration, so the
+; ball moves a pixel every four frames - 15 a second - while the paddle is
+; polled every two and still travels 60. Timed off the delay timer rather than
+; the display-wait quirk, because that quirk is one of the ones F1-F5 can
+; switch off and the game should not change speed when it does.
 wait_tick:
     LD   V5, 2
     LD   DT, V5

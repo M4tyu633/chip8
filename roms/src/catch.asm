@@ -29,7 +29,12 @@ next_block:
     LD   I, block
     DRW  V0, V1, 2
 
+; Two waits per row the block falls, so the bucket is polled twice as often as
+; the block moves. A block slow enough to react to and a bucket tied to the
+; same tick would be a bucket you cannot get across the screen in time.
 fall:
+    CALL wait_tick
+    CALL move_bucket
     CALL wait_tick
     CALL move_bucket
     LD   I, block

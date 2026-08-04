@@ -88,7 +88,16 @@ if(EMSCRIPTEN)
     "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/assets@/assets"
     --shell-file ${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html
   )
-  # Emscripten needs the ROMs present at link time for --preload-file.
+  # Everything --preload-file bakes into index.data has to be a link
+  # dependency, or the build is silently stale. Only the shell was listed here,
+  # so reassembling a ROM left ninja with "no work to do" and the old bytes
+  # still in index.data - the source changed, the site did not, and nothing
+  # said so. Globbed at configure time, so a genuinely new file needs a
+  # re-configure; CONFIGURE_DEPENDS makes CMake do that by itself.
+  file(GLOB CHIP8_PRELOADED CONFIGURE_DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/roms/*.ch8
+    ${CMAKE_CURRENT_SOURCE_DIR}/assets/*)
   set_property(TARGET chip8 APPEND PROPERTY LINK_DEPENDS
-    ${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html)
+    ${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html
+    ${CHIP8_PRELOADED})
 endif()

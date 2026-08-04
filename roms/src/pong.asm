@@ -202,8 +202,17 @@ draw_scores:
     DRW  V6, V7, 5
     RET
 
+; Three frames a tick rather than two. Polling the paddles twice per ball step,
+; which is what Brix and Catch do to keep control quick while the ball slows,
+; backfires here: those two erase and redraw a paddle every iteration, but this
+; one only draws a paddle that actually moved, so doubling the poll doubles the
+; draws only while a key is held - and under the display-wait quirk each of
+; those costs a whole frame. Measured, it took the ball from 12.2 pixels a
+; second to 7.1 but the paddles from 24.4 down to 9.1, which is worse to play
+; than the fast version. Lengthening the tick keeps the paddles at 1.6x the
+; ball: 9.8 and 15.7.
 wait_tick:
-    LD   V6, 2
+    LD   V6, 3
     LD   DT, V6
 tick_wait:
     LD   V6, DT
