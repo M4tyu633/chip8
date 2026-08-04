@@ -38,7 +38,12 @@ constexpr int kDisplayH = chip8::kDisplayHeight * kPixelScale;  // 352
 constexpr int kPanelX = kDisplayX + kDisplayW + 16;   // 736
 constexpr int kPanelW = kScreenWidth - kPanelX - 16;  // 528
 
-constexpr int kDisasmY = kDisplayY + kDisplayH + 14;  // 382
+// A strip for the current ROM's controls, directly under the display where it
+// cannot be missed.
+constexpr int kHintY = kDisplayY + kDisplayH + 10;  // 378
+constexpr int kHintH = 30;
+
+constexpr int kDisasmY = kHintY + kHintH + 10;  // 418
 constexpr int kDisasmH = kScreenHeight - kDisasmY - 16;
 constexpr int kDisasmRowH = 16;
 constexpr int kDisasmHeaderH = 28;
@@ -80,13 +85,48 @@ const Color kChanged = Color{240, 180, 100, 255};
 struct KeyMap {
   int key;
   int value;
+  // What is printed on the physical key. The on-screen pad shows this next to
+  // the hex value, because the hex value on its own is unusable: pressing A
+  // lights the cell marked 7 and nothing anywhere says why.
+  const char* label;
 };
 constexpr KeyMap kKeyMap[16] = {
-    {KEY_ONE, 0x1},   {KEY_TWO, 0x2}, {KEY_THREE, 0x3}, {KEY_FOUR, 0xC},
-    {KEY_Q, 0x4},     {KEY_W, 0x5},   {KEY_E, 0x6},     {KEY_R, 0xD},
-    {KEY_A, 0x7},     {KEY_S, 0x8},   {KEY_D, 0x9},     {KEY_F, 0xE},
-    {KEY_Z, 0xA},     {KEY_X, 0x0},   {KEY_C, 0xB},     {KEY_V, 0xF},
+    {KEY_ONE, 0x1, "1"}, {KEY_TWO, 0x2, "2"}, {KEY_THREE, 0x3, "3"},
+    {KEY_FOUR, 0xC, "4"}, {KEY_Q, 0x4, "Q"}, {KEY_W, 0x5, "W"},
+    {KEY_E, 0x6, "E"},   {KEY_R, 0xD, "R"},  {KEY_A, 0x7, "A"},
+    {KEY_S, 0x8, "S"},   {KEY_D, 0x9, "D"},  {KEY_F, 0xE, "F"},
+    {KEY_Z, 0xA, "Z"},   {KEY_X, 0x0, "X"},  {KEY_C, 0xB, "C"},
+    {KEY_V, 0xF, "V"},
 };
+
+const char* PhysicalKeyFor(int value) {
+  for (const KeyMap& mapping : kKeyMap) {
+    if (mapping.value == value) return mapping.label;
+  }
+  return "?";
+}
+
+// The bundled ROMs, in the order TAB cycles them. Games first, so the emulator
+// opens on something playable rather than on a demo that only animates.
+//
+// Each one carries its own control hint, drawn under the display. Leaving that
+// to the surrounding web page did not work: the page is scrollable and the
+// canvas is not, so by the time you are looking at the game the instructions
+// are off screen.
+struct RomEntry {
+  const char* path;
+  const char* title;
+  const char* controls;
+};
+constexpr RomEntry kRoms[] = {
+    {"roms/brix.ch8", "BRIX", "A and D move the paddle"},
+    {"roms/pong.ch8", "PONG", "1 / Q left player      4 / R right player"},
+    {"roms/catch.ch8", "CATCH", "A and D move the bucket"},
+    {"roms/bounce.ch8", "BOUNCE", "a demo - no input"},
+    {"roms/counter.ch8", "COUNTER", "a demo - no input"},
+    {"roms/keypad.ch8", "KEYPAD", "press any of the sixteen keys shown right"},
+};
+constexpr int kRomCount = static_cast<int>(sizeof(kRoms) / sizeof(kRoms[0]));
 
 // ---------------------------------------------------------------------------
 
@@ -119,8 +159,11 @@ struct App {
   Sound beep{};
   bool audio_ready = false;
 
-  std::vector<std::string> rom_paths;
   int rom_index = 0;
+  // Shown in the strip under the display. Held separately from kRoms because a
+  // ROM loaded from the file picker is not in that table.
+  std::string rom_title = "NO ROM";
+  std::string rom_controls = "press TAB to load one of the bundled ROMs";
 };
 
 App g_app;
@@ -184,15 +227,15 @@ void UploadDisplay() {
 }
 
 void LoadRomAt(int index) {
-  if (g_app.rom_paths.empty()) return;
-  const int count = static_cast<int>(g_app.rom_paths.size());
-  g_app.rom_index = ((index % count) + count) % count;
+  g_app.rom_index = ((index % kRomCount) + kRomCount) % kRomCount;
+  const RomEntry& rom = kRoms[g_app.rom_index];
 
-  const std::string& path = g_app.rom_paths[g_app.rom_index];
-  if (g_app.cpu.LoadRomFile(path)) {
+  if (g_app.cpu.LoadRomFile(rom.path)) {
     g_app.rom_loaded = true;
     g_app.paused = false;
-    g_app.rom_name = GetFileName(path.c_str());
+    g_app.rom_name = GetFileName(rom.path);
+    g_app.rom_title = rom.title;
+    g_app.rom_controls = rom.controls;
     g_app.prev_v = g_app.cpu.v();
     g_app.v_flash.fill(0.0f);
     g_app.disasm_top = chip8::kProgramStart;
@@ -272,6 +315,8 @@ void HandleInput() {
         g_app.rom_loaded = true;
         g_app.paused = false;
         g_app.rom_name = GetFileName(path.c_str());
+        g_app.rom_title = "LOADED";
+        g_app.rom_controls = "controls depend on the ROM";
         SetStatus("loaded " + g_app.rom_name);
       } else {
         SetStatus("not a valid ROM");
@@ -315,6 +360,27 @@ void DrawDisplayPanel() {
 // instead, measured from the decaying execution histogram, and it is allowed
 // to move at most twice a second. Over fifteen seconds of play that settles to
 // three moves for Brix and one each for Pong and Catch.
+// The strip under the display: what is loaded, how to play it, and how to get
+// to the next one. Everything here was previously only in the surrounding HTML
+// page, where nobody found it.
+void DrawHintStrip() {
+  DrawRectangle(kDisplayX - 2, kHintY, kDisplayW + 4, kHintH, kPanelBg);
+
+  int x = kDisplayX + 12;
+  DrawText_(g_app.rom_title, x, kHintY + 8, 16, kAccent);
+  x += static_cast<int>(MeasureTextEx(g_app.font, g_app.rom_title.c_str(), 16.0f,
+                                      1.0f)
+                            .x) +
+       18;
+  DrawText_(g_app.rom_controls, x, kHintY + 9, 15, kText);
+
+  // Right-aligned, so the ROM's own controls stay put as they change length.
+  const std::string cycle = "TAB  next ROM";
+  const int width =
+      static_cast<int>(MeasureTextEx(g_app.font, cycle.c_str(), 15.0f, 1.0f).x);
+  DrawText_(cycle, kDisplayX + kDisplayW - 12 - width, kHintY + 9, 15, kDim);
+}
+
 void UpdateDisasmWindow() {
   const int span = kDisasmRows * 2;
   const int max_top = chip8::kMemorySize - span;
@@ -513,17 +579,26 @@ void DrawRegisterPanel() {
   y += 12;
 
   // The 16-key pad, lit to match what the core currently believes is held.
+  //
+  // Each cell carries both numbers: the CHIP-8 value on the left, and the key
+  // you actually press on the right. They disagree almost everywhere - the
+  // COSMAC VIP pad was 1 2 3 C / 4 5 6 D / 7 8 9 E / A 0 B F, so physical A is
+  // CHIP-8 7 - and showing only the hex value meant the panel lit up somewhere
+  // apparently unrelated to the key you had just hit.
   DrawText_("KEYPAD", left, y, 14, kDim);
+  DrawText_("chip-8 value / your key", left + 74, y, 13, kGrid);
   y += 20;
   constexpr int kPadLayout[16] = {0x1, 0x2, 0x3, 0xC, 0x4, 0x5, 0x6, 0xD,
                                   0x7, 0x8, 0x9, 0xE, 0xA, 0x0, 0xB, 0xF};
   for (int i = 0; i < 16; ++i) {
-    const int x = left + (i % 4) * 34;
+    const int x = left + (i % 4) * 58;
     const int ry = y + (i / 4) * 30;
     const int value = kPadLayout[i];
     const bool down = g_app.cpu.KeyPressed(value);
-    DrawRectangle(x, ry, 28, 24, down ? kAccent : kGrid);
-    DrawText_(Hex(value, 1), x + 10, ry + 4, 15, down ? kBg : kDim);
+    DrawRectangle(x, ry, 52, 24, down ? kAccent : kGrid);
+    DrawText_(Hex(value, 1), x + 8, ry + 4, 15, down ? kBg : kDim);
+    DrawText_("/", x + 20, ry + 5, 13, down ? kBg : kGrid);
+    DrawText_(PhysicalKeyFor(value), x + 32, ry + 4, 15, down ? kBg : kText);
   }
   y += 4 * 30 + 6;
 
@@ -539,9 +614,13 @@ void DrawRegisterPanel() {
 }
 
 void DrawHelpBar() {
+  // The debugger's own controls. The ROM's controls are in the hint strip
+  // directly under the display instead, because that is the one thing you need
+  // before you have read anything at all.
   const std::string help =
-      "SPACE pause   N step   TAB next ROM   BACKSPACE reset   [ ] speed   "
-      "F1-F5 quirks   keys 1234/QWER/ASDF/ZXCV";
+      "SPACE pause    N step while paused    BACKSPACE reset    "
+      "[ ] instructions per frame    F1-F5 hardware quirks    "
+      "game keys 1234 / QWER / ASDF / ZXCV";
   DrawText_(help, kDisplayX, kScreenHeight - 14, 13, kDim);
 }
 
@@ -605,6 +684,7 @@ void UpdateFrame() {
   ClearBackground(kBg);
 
   DrawDisplayPanel();
+  DrawHintStrip();
   DrawDisassembly();
   DrawRegisterPanel();
   DrawHelpBar();
@@ -630,6 +710,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE void LoadRomFromMemory(const std::uint8_t* data,
     g_app.rom_loaded = true;
     g_app.paused = false;
     g_app.rom_name = name != nullptr ? name : "uploaded ROM";
+    g_app.rom_title = "LOADED";
+    g_app.rom_controls = "controls depend on the ROM";
     g_app.prev_v = g_app.cpu.v();
     g_app.v_flash.fill(0.0f);
     g_app.disasm_top = chip8::kProgramStart;
@@ -687,15 +769,12 @@ int main(int argc, char** argv) {
     g_app.audio_ready = true;
   }
 
-  // Games first, so the emulator opens on something playable rather than on a
-  // demo that only animates. TAB cycles in this order.
-  g_app.rom_paths = {"roms/brix.ch8",   "roms/pong.ch8",    "roms/catch.ch8",
-                     "roms/bounce.ch8", "roms/counter.ch8", "roms/keypad.ch8"};
-
   if (argc > 1) {
     if (g_app.cpu.LoadRomFile(argv[1])) {
       g_app.rom_loaded = true;
       g_app.rom_name = GetFileName(argv[1]);
+      g_app.rom_title = "LOADED";
+      g_app.rom_controls = "controls depend on the ROM";
     }
   }
   if (!g_app.rom_loaded) LoadRomAt(0);

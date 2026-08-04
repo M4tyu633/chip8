@@ -123,19 +123,78 @@
         display: none;
       }
 
-      .keys {
+      .guide {
+        width: 100%;
+        max-width: 1280px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 16px;
+        margin-top: 8px;
+      }
+
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 16px 18px;
+      }
+
+      .card h2 {
+        margin: 0 0 12px;
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+
+      .card p {
+        margin: 0 0 10px;
+        font-size: 13px;
+        line-height: 1.65;
+        color: var(--dim);
+      }
+
+      .card p:last-child {
+        margin-bottom: 0;
+      }
+
+      dl {
+        margin: 0;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 8px 14px;
+        align-items: baseline;
+        font-size: 13px;
+      }
+
+      dt {
+        white-space: nowrap;
+      }
+
+      dd {
+        margin: 0;
+        color: var(--dim);
+        line-height: 1.5;
+      }
+
+      kbd {
+        font: inherit;
+        font-size: 12px;
+        color: var(--text);
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-bottom-width: 2px;
+        border-radius: 4px;
+        padding: 2px 7px;
+        white-space: nowrap;
+      }
+
+      .note {
         font-size: 12px;
         color: var(--dim);
         text-align: center;
-        line-height: 1.8;
         max-width: 760px;
-      }
-
-      .keys code {
-        color: var(--text);
-        background: var(--panel);
-        padding: 2px 6px;
-        border-radius: 4px;
+        line-height: 1.7;
       }
 
       footer {
@@ -154,20 +213,12 @@
     <header>
       <h1>CHIP-8 &middot; emulator and debugger</h1>
       <p>
-        Written from scratch in C++ with a Raylib front end, compiled to
-        WebAssembly. The panel on the right is live machine state: registers,
-        stack, the bytes around I, and a disassembly that follows the program
-        counter.
-      </p>
-      <p>
-        It opens on <strong>Brix</strong>, a brick breaker &mdash; move with
-        <code>A</code> and <code>D</code>. <code>Tab</code> cycles to
-        <strong>Pong</strong> (<code>1</code>/<code>Q</code> for the left
-        player, <code>4</code>/<code>R</code> for the right) and
-        <strong>Catch</strong> (<code>A</code> and <code>D</code> again), then
-        on to three smaller test ROMs. Every one of them is original, written
-        in CHIP-8 assembly and kept as readable source in
-        <code>roms/src/</code>.
+        CHIP-8 is a tiny virtual machine from 1977 &mdash; 35 instructions, 4 KB
+        of memory and a 64&times;32 black-and-white screen. This is an
+        implementation of it written from scratch in C++, compiled to
+        WebAssembly, wrapped in a debugger that shows the machine working while
+        it runs. <strong>Click the screen, then press <kbd>A</kbd> and
+        <kbd>D</kbd> to play.</strong>
       </p>
     </header>
 
@@ -183,24 +234,103 @@
     </div>
 
     <div class="controls">
-      <button id="btn-pause" type="button">Pause / resume</button>
-      <button id="btn-next" type="button">Next ROM</button>
-      <button id="btn-reset" type="button">Reset</button>
+      <button id="btn-pause" type="button">Pause / resume &middot; Space</button>
+      <button id="btn-next" type="button">Next ROM &middot; Tab</button>
+      <button id="btn-reset" type="button">Reset &middot; Backspace</button>
       <label class="file">
         Load a .ch8 file
         <input id="rom-input" type="file" accept=".ch8,.c8,.rom,application/octet-stream" />
       </label>
     </div>
 
-    <p class="keys">
-      Click the canvas first so it takes the keyboard. The 16-key pad maps to
-      <code>1 2 3 4</code> <code>Q W E R</code> <code>A S D F</code>
-      <code>Z X C V</code>. <code>Space</code> pauses, <code>N</code> single
-      steps while paused, <code>Tab</code> cycles the bundled ROMs,
-      <code>Backspace</code> resets, <code>[</code> and <code>]</code> change
-      speed, and <code>F1</code>&ndash;<code>F5</code> toggle the hardware
-      quirks.
+    <p class="note">
+      The keyboard goes to the screen only while it has focus &mdash; click it
+      once if nothing responds.
     </p>
+
+    <div class="guide">
+      <div class="card">
+        <h2>The six ROMs</h2>
+        <p>
+          <kbd>Tab</kbd> cycles through them. Every one is original, written by
+          hand in CHIP-8 assembly, with the commented source kept in
+          <code>roms/src/</code>.
+        </p>
+        <dl>
+          <dt><strong>Brix</strong></dt>
+          <dd>brick breaker &mdash; <kbd>A</kbd> <kbd>D</kbd> to move</dd>
+          <dt><strong>Pong</strong></dt>
+          <dd>
+            two players &mdash; <kbd>1</kbd> <kbd>Q</kbd> left,
+            <kbd>4</kbd> <kbd>R</kbd> right
+          </dd>
+          <dt><strong>Catch</strong></dt>
+          <dd>catch the falling blocks &mdash; <kbd>A</kbd> <kbd>D</kbd></dd>
+          <dt><strong>Bounce</strong></dt>
+          <dd>a bouncing ball, no input</dd>
+          <dt><strong>Counter</strong></dt>
+          <dd>counts 0&ndash;255 in decimal, no input</dd>
+          <dt><strong>Keypad</strong></dt>
+          <dd>press a key, see its hex digit</dd>
+        </dl>
+      </div>
+
+      <div class="card">
+        <h2>Driving the debugger</h2>
+        <dl>
+          <dt><kbd>Space</kbd></dt>
+          <dd>pause and resume</dd>
+          <dt><kbd>N</kbd></dt>
+          <dd>run exactly one instruction, while paused</dd>
+          <dt><kbd>Tab</kbd></dt>
+          <dd>load the next bundled ROM</dd>
+          <dt><kbd>Backspace</kbd></dt>
+          <dd>restart the current ROM</dd>
+          <dt><kbd>[</kbd> <kbd>]</kbd></dt>
+          <dd>
+            instructions per frame &mdash; the emulator&rsquo;s clock speed,
+            11 by default
+          </dd>
+          <dt><kbd>F1</kbd>&ndash;<kbd>F5</kbd></dt>
+          <dd>
+            toggle the five hardware quirks that real CHIP-8 interpreters
+            disagree about: how shifts pick their operand, whether
+            <code>Fx55</code>/<code>Fx65</code> leave I moved, whether logic ops
+            clear VF, whether draws wait for vblank, and whether sprites clip or
+            wrap at the edges
+          </dd>
+        </dl>
+      </div>
+
+      <div class="card">
+        <h2>What you are looking at</h2>
+        <p>
+          <strong>Top left</strong> is the emulated 64&times;32 display, scaled
+          up 11&times;. The strip under it names the ROM and its controls.
+        </p>
+        <p>
+          <strong>Below that</strong> is a live disassembly. It parks over
+          whichever stretch of code is running hottest rather than chasing the
+          program counter, which at sixty frames a second is unreadable; the
+          green wash on a row means it ran recently. Pause and it follows the
+          program counter exactly, so <kbd>N</kbd> steps through line by line.
+        </p>
+        <p>
+          <strong>On the right</strong> is the machine itself: the sixteen V
+          registers (highlighted amber for a moment when written), the program
+          counter, index and timers, the call stack, the bytes around I, and the
+          keypad. Nothing there is cached &mdash; it is read straight out of the
+          interpreter each frame.
+        </p>
+        <p>
+          The keypad reads <em>CHIP-8 value / your key</em>. The original COSMAC
+          VIP had a 16-key hex pad laid out
+          <code>1 2 3 C / 4 5 6 D / 7 8 9 E / A 0 B F</code>, mapped here onto
+          the left block of a QWERTY keyboard &mdash; so pressing <kbd>A</kbd>
+          lights CHIP-8 key <code>7</code>.
+        </p>
+      </div>
+    </div>
 
     <footer>Built by Matthew Labrador</footer>
 
