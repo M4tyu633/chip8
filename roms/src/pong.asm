@@ -21,6 +21,7 @@ start:
 
 new_rally:
     CLS
+    LD   VC, 0          ; the ball-step counter, see `rally`
     LD   VD, 1          ; the two paddle columns, in registers because DRW
     LD   VE, 62         ; takes both coordinates as registers
     LD   V4, 13         ; paddles start centred
@@ -39,9 +40,18 @@ new_rally:
     DRW  V0, V1, 1      ; drawn here so the first erase in the loop has
                         ; something to erase rather than switching a pixel on
 
+; The paddles move on every tick, the ball on every second one. VC is the
+; counter: the header has always listed it as scratch and nothing ever used it,
+; which makes it the one register free to hold something across iterations.
+; Counting to two rather than masking with AND keeps the VF-reset quirk out of
+; it entirely.
 rally:
     CALL wait_tick
     CALL move_paddles
+    ADD  VC, 1
+    SE   VC, 2
+    JP   rally
+    LD   VC, 0
 
     LD   I, ball
     DRW  V0, V1, 1      ; erase
@@ -202,15 +212,19 @@ draw_scores:
     DRW  V6, V7, 5
     RET
 
-; Three frames a tick rather than two. Polling the paddles twice per ball step,
-; which is what Brix and Catch do to keep control quick while the ball slows,
-; backfires here: those two erase and redraw a paddle every iteration, but this
-; one only draws a paddle that actually moved, so doubling the poll doubles the
-; draws only while a key is held - and under the display-wait quirk each of
-; those costs a whole frame. Measured, it took the ball from 12.2 pixels a
-; second to 7.1 but the paddles from 24.4 down to 9.1, which is worse to play
-; than the fast version. Lengthening the tick keeps the paddles at 1.6x the
-; ball: 9.8 and 15.7.
+; Three frames a tick. The ball is held back by the counter in `rally` rather
+; than by lengthening this, because the paddles are timed off the same tick and
+; a longer one slows them just as much: at five frames the ball reaches 7.4
+; pixels a second but the paddles drop to 11.2, and the ratio between them
+; never improves past about 1.5.
+;
+; Brix and Catch solve that by polling the paddle several times per ball step,
+; which cannot be copied here. Those two erase and redraw their paddle every
+; iteration; this one only draws a paddle that actually moved, so repeating the
+; poll multiplies the draws whenever a key is held, and under the display-wait
+; quirk each of those costs a whole frame. Measured, polling twice took the
+; ball from 12.2 to 7.1 but the paddles from 24.4 to 9.1 - worse to play than
+; the fast version.
 wait_tick:
     LD   V6, 3
     LD   DT, V6

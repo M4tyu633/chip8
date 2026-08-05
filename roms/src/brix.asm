@@ -57,11 +57,19 @@ serve:
                         ; that first XOR would switch a pixel *on* and leave it
                         ; stuck there for the rest of the game
 
-; The paddle is polled twice for every step the ball takes. Moving both on the
-; same tick is the obvious loop and it plays badly: slowing the ball to
+; The paddle is polled five times for every step the ball takes. Moving both on
+; the same tick is the obvious loop and it plays badly: slowing the ball to
 ; something you can react to slows the paddle with it, and a paddle that
-; crawls is worse than a fast ball. Two waits per iteration decouples them.
+; crawls is worse than a fast ball. Splitting them costs nothing - measured,
+; the paddle sits at 20 to 23 pixels a second whatever this count is, while the
+; ball goes 7.4, 5.5, 4.3, 3.5, 3.1 for two through six.
 game_loop:
+    CALL wait_tick
+    CALL move_paddle
+    CALL wait_tick
+    CALL move_paddle
+    CALL wait_tick
+    CALL move_paddle
     CALL wait_tick
     CALL move_paddle
     CALL wait_tick
