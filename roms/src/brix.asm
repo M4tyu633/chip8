@@ -43,7 +43,7 @@ new_board:
 ; first bounce is free and the player gets the whole climb to the bricks to
 ; find the keys.
 serve:
-    LD   V4, 28         ; paddle x, even, and every move is +/-2, so it lands
+    LD   V4, 28         ; paddle x. Every move is one pixel, so it lands
                         ; exactly on 0 and 56 rather than overshooting
     LD   I, paddle
     DRW  V4, VD, 1
@@ -59,10 +59,11 @@ serve:
 
 ; The paddle is polled five times for every step the ball takes. Moving both on
 ; the same tick is the obvious loop and it plays badly: slowing the ball to
-; something you can react to slows the paddle with it, and a paddle that
-; crawls is worse than a fast ball. Splitting them costs nothing - measured,
-; the paddle sits at 20 to 23 pixels a second whatever this count is, while the
-; ball goes 7.4, 5.5, 4.3, 3.5, 3.1 for two through six.
+; something you can react to slows the paddle with it. Splitting them means the
+; two can be set independently - the poll count sets the ball, and the size of
+; the step in paddle_left and paddle_right sets the paddle. Measured, the ball
+; goes 7.4, 5.5, 4.3, 3.5, 3.1 pixels a second for two polls through six, and
+; the paddle stays put at whichever of those it is.
 game_loop:
     CALL wait_tick
     CALL move_paddle
@@ -85,11 +86,12 @@ game_loop:
 ; Timing
 ; ---------------------------------------------------------------------------
 
-; One tick every two frames. The game loop waits twice per iteration, so the
-; ball moves a pixel every four frames - 15 a second - while the paddle is
-; polled every two and still travels 60. Timed off the delay timer rather than
-; the display-wait quirk, because that quirk is one of the ones F1-F5 can
-; switch off and the game should not change speed when it does.
+; One tick every two frames, and the game loop waits five times per iteration.
+; Measured, that puts the ball at 3.5 pixels a second and the paddle at 11.3 -
+; not the numbers this arithmetic suggests, because under the display-wait
+; quirk every draw is held to the next frame and stretches the loop. Timed off
+; the delay timer rather than off that quirk, because it is one of the ones
+; F1-F5 can switch off and the game should not change speed when it does.
 wait_tick:
     LD   V5, 2
     LD   DT, V5
@@ -154,9 +156,9 @@ paddle_left:
     RET                 ; already against the left wall
     LD   I, paddle
     DRW  V4, VD, 1      ; erase
-    ADD  V4, 254        ; -2
+    ADD  V4, 255        ; -1
     LD   I, paddle
-    DRW  V4, VD, 1      ; and redraw two pixels over
+    DRW  V4, VD, 1      ; and redraw one pixel over
     RET
 
 paddle_right:
@@ -164,7 +166,7 @@ paddle_right:
     RET
     LD   I, paddle
     DRW  V4, VD, 1
-    ADD  V4, 2
+    ADD  V4, 1
     LD   I, paddle
     DRW  V4, VD, 1
     RET

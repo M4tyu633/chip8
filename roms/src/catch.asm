@@ -18,7 +18,7 @@ start:
     LD   V8, 3          ; lives
     LD   VC, 0          ; score
     CLS
-    LD   V4, 28         ; bucket x, even, and it moves +/-2, so it lands
+    LD   V4, 28         ; bucket x. It moves a pixel at a time, so it lands
                         ; exactly on 0 and 56 rather than stepping past them
     LD   I, bucket
     DRW  V4, VD, 1
@@ -29,13 +29,17 @@ next_block:
     LD   I, block
     DRW  V0, V1, 2
 
-; Three waits per row the block falls, so the bucket is polled three times as
+; Four waits per row the block falls, so the bucket is polled four times as
 ; often as the block moves. A block slow enough to react to and a bucket tied
 ; to the same tick would be a bucket you cannot get across the screen in time.
-; Measured: the block takes 5.2 seconds top to bottom and the bucket runs at 18
-; pixels a second, near enough what it did when the block fell four times as
-; fast.
+;
+; Four rather than three because the two have to be checked against each other:
+; the bucket runs at 9.3 pixels a second, so crossing the full 56 takes 6.0
+; seconds, and a block that reached the bottom in 5.2 would be unreachable
+; whenever it spawned at the far side. At four waits it falls in 7.2.
 fall:
+    CALL wait_tick
+    CALL move_bucket
     CALL wait_tick
     CALL move_bucket
     CALL wait_tick
@@ -99,7 +103,7 @@ bucket_left:
     RET
     LD   I, bucket
     DRW  V4, VD, 1
-    ADD  V4, 254        ; -2
+    ADD  V4, 255        ; -1
     LD   I, bucket
     DRW  V4, VD, 1
     RET
@@ -109,7 +113,7 @@ bucket_right:
     RET
     LD   I, bucket
     DRW  V4, VD, 1
-    ADD  V4, 2
+    ADD  V4, 1
     LD   I, bucket
     DRW  V4, VD, 1
     RET
