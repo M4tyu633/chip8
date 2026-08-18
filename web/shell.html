@@ -603,16 +603,16 @@
 
     <!-- ROM Quick-Switch Tabs -->
     <div class="rom-tabs" role="tablist" aria-label="Bundled ROMs">
-      <button class="rom-tab active" type="button" data-rom-index="0" role="tab" aria-selected="true">🧱 Brix</button>
-      <button class="rom-tab" type="button" data-rom-index="1" role="tab" aria-selected="false">🏓 Pong</button>
-      <button class="rom-tab" type="button" data-rom-index="2" role="tab" aria-selected="false">🎯 Catch</button>
-      <button class="rom-tab" type="button" data-rom-index="3" role="tab" aria-selected="false">⚾ Bounce</button>
-      <button class="rom-tab" type="button" data-rom-index="4" role="tab" aria-selected="false">🔢 Counter</button>
-      <button class="rom-tab" type="button" data-rom-index="5" role="tab" aria-selected="false">⌨️ Keypad</button>
+      <button class="rom-tab active" type="button" data-rom-index="0" role="tab" aria-selected="true">Brix</button>
+      <button class="rom-tab" type="button" data-rom-index="1" role="tab" aria-selected="false">Pong</button>
+      <button class="rom-tab" type="button" data-rom-index="2" role="tab" aria-selected="false">Catch</button>
+      <button class="rom-tab" type="button" data-rom-index="3" role="tab" aria-selected="false">Bounce</button>
+      <button class="rom-tab" type="button" data-rom-index="4" role="tab" aria-selected="false">Counter</button>
+      <button class="rom-tab" type="button" data-rom-index="5" role="tab" aria-selected="false">Keypad</button>
     </div>
 
     <!-- CRT Monitor Frame -->
-    <div id="frame">
+    <div id="frame" class="crt-off">
       <canvas
         id="canvas"
         width="1280"
@@ -628,19 +628,19 @@
     <!-- Controls Toolbar -->
     <div class="controls">
       <div class="control-group">
-        <button id="btn-pause" type="button">▶⏸ Pause &middot; Space</button>
+        <button id="btn-pause" type="button">Pause &middot; Space</button>
         <button id="btn-next" type="button">Next ROM &middot; Tab</button>
-        <button id="btn-reset" type="button">⟲ Reset &middot; Backspace</button>
-        <button id="btn-debug" type="button">🔍 Show debugger &middot; H</button>
+        <button id="btn-reset" type="button">Reset &middot; Backspace</button>
+        <button id="btn-debug" type="button">Show debugger &middot; H</button>
         <label class="file">
-          📁 Load .ch8
+          Load .ch8
           <input id="rom-input" type="file" accept=".ch8,.c8,.rom,application/octet-stream" />
         </label>
       </div>
 
       <div class="control-group">
-        <button id="btn-mute" type="button">🔊 Mute</button>
-        <button id="btn-crt" type="button" class="active">📺 CRT FX: ON</button>
+        <button id="btn-mute" type="button">Mute</button>
+        <button id="btn-crt" type="button">CRT FX: OFF</button>
         
         <div class="speed-control">
           <label for="speed-slider">Speed:</label>
@@ -861,7 +861,7 @@
       function updateMuteState() {
         const btn = document.getElementById("btn-mute");
         if (btn) {
-          btn.innerHTML = isMuted ? "🔇 Unmute" : "🔊 Mute";
+          btn.innerHTML = isMuted ? "Unmute" : "Mute";
           btn.classList.toggle("active", isMuted);
           btn.setAttribute("aria-label", isMuted ? "Unmute audio" : "Mute audio");
         }
