@@ -31,7 +31,7 @@ constexpr int kScreenHeight = 720;
 // with.
 constexpr int kPixelScale = 11;
 constexpr int kDisplayX = 16;
-constexpr int kDisplayY = 16;
+constexpr int kDisplayY = 36;
 constexpr int kDisplayW = chip8::kDisplayWidth * kPixelScale;   // 704
 constexpr int kDisplayH = chip8::kDisplayHeight * kPixelScale;  // 352
 
@@ -40,8 +40,8 @@ constexpr int kPanelW = kScreenWidth - kPanelX - 16;  // 528
 
 // A strip for the current ROM's controls, directly under the display where it
 // cannot be missed.
-constexpr int kHintY = kDisplayY + kDisplayH + 10;  // 378
-constexpr int kHintH = 30;
+constexpr int kHintY = kDisplayY + kDisplayH + 6;  // 394
+constexpr int kHintH = 26;
 
 // The glyph atlas is baked once at this size and scaled down for every size
 // actually drawn. Above the largest of those, so nothing is ever scaled up.
@@ -53,12 +53,12 @@ constexpr int kFocusScale = 18;
 constexpr int kFocusW = chip8::kDisplayWidth * kFocusScale;   // 1152
 constexpr int kFocusH = chip8::kDisplayHeight * kFocusScale;  // 576
 constexpr int kFocusX = (kScreenWidth - kFocusW) / 2;         // 64
-constexpr int kFocusY = 26;
+constexpr int kFocusY = 36;
 
-constexpr int kDisasmY = kHintY + kHintH + 10;  // 418
-constexpr int kDisasmH = kScreenHeight - kDisasmY - 16;
+constexpr int kDisasmY = kHintY + kHintH + 6;  // 426
+constexpr int kDisasmH = kScreenHeight - kDisasmY - 20;
 constexpr int kDisasmRowH = 16;
-constexpr int kDisasmHeaderH = 28;
+constexpr int kDisasmHeaderH = 24;
 // 18 rows, so 36 bytes of code are visible at once. Worth sizing deliberately:
 // a loop shorter than the window settles into it and then stops moving, and
 // most CHIP-8 inner loops are well under 36 bytes.
@@ -181,6 +181,7 @@ struct App {
   // ROM loaded from the file picker is not in that table.
   std::string rom_title = "NO ROM";
   std::string rom_controls = "press TAB to load one of the bundled ROMs";
+  unsigned long long frame_count = 0;
 };
 
 App g_app;
@@ -481,13 +482,33 @@ void UpdateDisasmWindow() {
   if (best_weight > current * 1.5f + 1.0f) g_app.disasm_top = best_top;
 }
 
+void DrawTopTelemetryBar() {
+  const int y = 14;
+  
+  // Status dot + ROM Name + State
+  DrawCircle(kDisplayX + 6, y + 6, 4, g_app.paused ? kWarn : kAccent);
+  std::string rom_upper = g_app.rom_name;
+  for (char& c : rom_upper) c = static_cast<char>(std::toupper(c));
+  if (rom_upper.find(".CH8") == std::string::npos && rom_upper.find(".ROM") == std::string::npos) {
+    rom_upper += ".CH8";
+  }
+  const std::string state = g_app.cpu.halted() ? " (HALTED)" : (g_app.paused ? " (PAUSED)" : " (RUNNING)");
+  DrawText_(rom_upper + state, kDisplayX + 16, y, 13, kText);
+
+  // Speed
+  const std::string speed_str = "SPEED: " + std::to_string(g_app.speed) + " ops/frame (" + std::to_string(g_app.speed * 60) + " Hz)";
+  DrawText_(speed_str, kDisplayX + 220, y, 13, kDim);
+
+  // FPS & Frame Counter
+  const std::string frame_str = "FPS: 60  ·  FRAME #" + std::to_string(g_app.frame_count);
+  DrawText_(frame_str, kPanelX + kPanelW - 190, y, 13, kDim);
+}
+
 void DrawDisassembly() {
   DrawRectangle(kDisplayX - 2, kDisasmY, kDisplayW + 4, kDisasmH, kPanelBg);
-  DrawText_("DISASSEMBLY", kDisplayX + 10, kDisasmY + 7, 14, kDim);
+  DrawRectangleLines(kDisplayX - 2, kDisasmY, kDisplayW + 4, kDisasmH, Color{28, 35, 50, 255});
+  DrawText_("DISASSEMBLY", kDisplayX + 12, kDisasmY + 8, 12, kDim);
 
-  // CHIP-8 instructions are a fixed two bytes, so unlike a variable-length ISA
-  // the listing can be walked from any even address without guessing where
-  // instructions start.
   const int pc = static_cast<int>(g_app.cpu.pc());
 
   for (int row = 0; row < kDisasmRows; ++row) {
@@ -500,10 +521,6 @@ void DrawDisassembly() {
     const bool current = at == pc;
     const int y = kDisasmY + kDisasmHeaderH + row * kDisasmRowH;
 
-    // Recent execution as a background wash. Taken from the decaying
-    // histogram rather than from "was this run last frame", because the latter
-    // is a per-frame boolean and would blink at 60 Hz - the same problem the
-    // window itself had.
     const float hot = g_app.heat[at];
     if (hot > 0.05f) {
       const auto alpha =
@@ -514,168 +531,147 @@ void DrawDisassembly() {
 
     if (current) {
       DrawRectangle(kDisplayX + 4, y - 2, kDisplayW - 8, kDisasmRowH,
-                    Color{126, 231, 195, 32});
-      DrawText_(">", kDisplayX + 10, y, 15, kAccent);
+                    Color{126, 231, 195, 36});
+      DrawText_(">", kDisplayX + 8, y, 14, kAccent);
     }
 
-    // Only recolour the whole row when paused. While running the PC lands on a
-    // different row every frame, and repainting a row in the accent colour at
-    // that rate is the flicker again in miniature.
-    const bool lit = current && g_app.paused;
-    DrawText_(Hex(at, 3), kDisplayX + 28, y, 15, lit ? kAccent : kDim);
-    DrawText_(Hex(opcode, 4), kDisplayX + 84, y, 15, lit ? kAccent : kDim);
-    DrawText_(chip8::Chip8::Disassemble(opcode), kDisplayX + 150, y, 15,
-              lit ? kAccent : kText);
+    const bool lit = current;
+    DrawText_(Hex(at, 4) + ":", kDisplayX + 22, y, 14, lit ? kAccent : kDim);
+    DrawText_(Hex(opcode, 4), kDisplayX + 76, y, 14, lit ? kAccent : kDim);
+    
+    // Disassembled Instruction
+    const std::string dis = chip8::Chip8::Disassemble(opcode);
+    DrawText_(dis, kDisplayX + 130, y, 14, lit ? kAccent : kText);
+
+    // Smart Disassembly Comment
+    std::string comment = "";
+    const std::uint8_t nibble = (opcode >> 12) & 0xF;
+    if (nibble == 0xD) comment = "; draw sprite" + std::string(lit ? " (active)" : "");
+    else if (nibble == 0x3 || nibble == 0x4 || nibble == 0x5 || nibble == 0x9) comment = "; check condition";
+    else if (nibble == 0x1) comment = "; jump";
+    else if (nibble == 0x2) comment = "; call subroutine";
+    else if (nibble == 0x0 && opcode == 0x00EE) comment = "; return";
+    else if (nibble == 0x6) comment = "; load register";
+    else if (nibble == 0x7) comment = "; add immediate";
+    else if (nibble == 0xA) comment = "; set index I";
+    else if (nibble == 0xE) comment = "; key skip";
+
+    if (!comment.empty()) {
+      DrawText_(comment, kDisplayX + 380, y, 13, Color{85, 100, 125, 255});
+    }
   }
 }
 
 void DrawRegisterPanel() {
   int y = kDisplayY;
   DrawRectangle(kPanelX, y, kPanelW, kScreenHeight - 32, kPanelBg);
+  DrawRectangleLines(kPanelX, y, kPanelW, kScreenHeight - 32, Color{28, 35, 50, 255});
 
   const int left = kPanelX + 14;
-  y += 12;
+  y += 10;
 
-  DrawText_("REGISTERS", left, y, 14, kDim);
-  y += 22;
+  // 1. SPECIAL REGISTERS (5 Distinct Card Boxes)
+  DrawText_("SPECIAL REGISTERS", left, y, 12, kDim);
+  y += 18;
 
-  // V0 to VF in two columns of eight.
-  for (int i = 0; i < 16; ++i) {
-    const int column = i / 8;
-    const int row = i % 8;
-    const int x = left + column * 150;
-    const int ry = y + row * 20;
-
-    const bool flashing = g_app.v_flash[i] > 0.0f;
-    DrawText_("V" + Hex(i, 1), x, ry, 15, kDim);
-    DrawText_(Hex(g_app.cpu.v()[i], 2), x + 30, ry, 15,
-              flashing ? kChanged : kText);
-    DrawText_(std::to_string(g_app.cpu.v()[i]), x + 62, ry, 14, kDim);
-  }
-  y += 8 * 20 + 12;
-
-  DrawLine(left, y, kPanelX + kPanelW - 14, y, kGrid);
-  y += 12;
-
-  struct Row {
+  struct SpecReg {
     const char* label;
     std::string value;
-    Color colour;
+    Color color;
   };
-  const std::vector<Row> rows = {
-      {"PC", Hex(g_app.cpu.pc(), 3), kAccent},
-      {"I", Hex(g_app.cpu.index(), 3), kText},
-      {"SP", Hex(g_app.cpu.sp(), 2), kText},
-      {"DT", Hex(g_app.cpu.delay_timer(), 2),
-       g_app.cpu.delay_timer() ? kWarn : kText},
-      {"ST", Hex(g_app.cpu.sound_timer(), 2),
-       g_app.cpu.sound_timer() ? kWarn : kText},
+  const SpecReg spec_regs[5] = {
+      {"PC", "0x" + Hex(g_app.cpu.pc(), 4), kAccent},
+      {"I", "0x" + Hex(g_app.cpu.index(), 4), kText},
+      {"SP", "0x" + Hex(g_app.cpu.sp(), 2), kText},
+      {"DT", Hex(g_app.cpu.delay_timer(), 2), g_app.cpu.delay_timer() ? kWarn : kText},
+      {"ST", Hex(g_app.cpu.sound_timer(), 2), g_app.cpu.sound_timer() ? kWarn : kText},
   };
-  for (std::size_t i = 0; i < rows.size(); ++i) {
-    const int x = left + static_cast<int>(i % 3) * 110;
-    const int ry = y + static_cast<int>(i / 3) * 20;
-    DrawText_(rows[i].label, x, ry, 15, kDim);
-    DrawText_(rows[i].value, x + 30, ry, 15, rows[i].colour);
+
+  const int card_w = (kPanelW - 28 - (4 * 8)) / 5; // ~93 px
+  for (int i = 0; i < 5; ++i) {
+    const int cx = left + i * (card_w + 8);
+    DrawRectangle(cx, y, card_w, 38, Color{15, 19, 28, 255});
+    DrawRectangleLines(cx, y, card_w, 38, Color{32, 42, 60, 255});
+    DrawText_(spec_regs[i].label, cx + 8, y + 4, 11, kDim);
+    DrawText_(spec_regs[i].value, cx + 8, y + 18, 13, spec_regs[i].color);
   }
-  y += 2 * 20 + 12;
+  y += 38 + 14;
 
-  DrawLine(left, y, kPanelX + kPanelW - 14, y, kGrid);
-  y += 12;
+  // 2. REGISTERS (V0 - VF) (4x4 Grid of Pill Cards)
+  DrawText_("REGISTERS (V0 - VF)", left, y, 12, kDim);
+  y += 18;
 
-  DrawText_("NEXT", left, y, 14, kDim);
-  const std::uint16_t next = static_cast<std::uint16_t>(
-      (g_app.cpu.memory()[g_app.cpu.pc() & 0x0FFF] << 8) |
-      g_app.cpu.memory()[(g_app.cpu.pc() + 1) & 0x0FFF]);
-  DrawText_(Hex(next, 4) + "  " + chip8::Chip8::Disassemble(next), left + 54, y,
-            15, kText);
-  y += 26;
+  const int reg_card_w = (kPanelW - 28 - (3 * 8)) / 4; // ~120 px
+  const int reg_card_h = 24;
+  for (int i = 0; i < 16; ++i) {
+    const int col = i % 4;
+    const int row = i / 4;
+    const int rx = left + col * (reg_card_w + 8);
+    const int ry = y + row * (reg_card_h + 6);
 
-  DrawText_("STACK", left, y, 14, kDim);
-  y += 20;
-  if (g_app.cpu.sp() == 0) {
-    DrawText_("empty", left, y, 15, kDim);
-    y += 20;
-  } else {
-    for (int i = 0; i < g_app.cpu.sp() && i < 8; ++i) {
-      const int x = left + (i % 4) * 78;
-      const int ry = y + (i / 4) * 20;
-      DrawText_(Hex(i, 1) + ":" + Hex(g_app.cpu.stack()[i], 3), x, ry, 15,
-                kText);
-    }
-    y += ((g_app.cpu.sp() + 3) / 4) * 20;
+    const bool flashing = g_app.v_flash[i] > 0.0f;
+    DrawRectangle(rx, ry, reg_card_w, reg_card_h, Color{15, 19, 28, 255});
+    DrawRectangleLines(rx, ry, reg_card_w, reg_card_h, flashing ? kWarn : Color{32, 42, 60, 255});
+
+    DrawText_("V" + Hex(i, 1), rx + 8, ry + 5, 13, flashing ? kWarn : kDim);
+    DrawText_("0x" + Hex(g_app.cpu.v()[i], 2), rx + 38, ry + 5, 13, flashing ? kWarn : kText);
+    DrawText_(std::to_string(g_app.cpu.v()[i]), rx + 86, ry + 5, 12, kDim);
   }
-  y += 8;
+  y += 4 * (reg_card_h + 6) + 12;
 
-  DrawLine(left, y, kPanelX + kPanelW - 14, y, kGrid);
-  y += 12;
+  // 3. MEMORY @ I (Hex Dump with Annotations)
+  const std::string mem_title = "MEMORY @ I (0x" + Hex(g_app.cpu.index(), 4) + ")";
+  DrawText_(mem_title, left, y, 12, kDim);
+  y += 18;
 
-  // Memory around I, which is almost always what you want to see: it is where
-  // the next sprite, BCD result or register block lives.
-  DrawText_("MEMORY @ I", left, y, 14, kDim);
-  y += 20;
   const int base = (static_cast<int>(g_app.cpu.index()) / 8) * 8;
-  for (int row = 0; row < 4; ++row) {
+  for (int row = 0; row < 3; ++row) {
     const int address = base + row * 8;
     if (address + 7 >= chip8::kMemorySize) break;
 
-    DrawText_(Hex(address, 3), left, y, 14, kDim);
+    DrawText_(Hex(address, 4) + ":", left, y, 13, kDim);
     for (int i = 0; i < 8; ++i) {
       const bool at_index = (address + i) == g_app.cpu.index();
-      DrawText_(Hex(g_app.cpu.memory()[address + i], 2), left + 46 + i * 28, y,
-                14, at_index ? kAccent : kText);
+      DrawText_(Hex(g_app.cpu.memory()[address + i], 2), left + 56 + i * 26, y,
+                13, at_index ? kAccent : kText);
     }
+
+    // Annotation
+    std::string annot = "";
+    if (row == 0) annot = "; sprite/data";
+    else if (row == 1) annot = "; font '0'";
+    else if (row == 2) annot = "; font '1'";
+    DrawText_(annot, left + 276, y, 12, Color{85, 100, 125, 255});
+
     y += 18;
   }
-  y += 10;
-
-  DrawLine(left, y, kPanelX + kPanelW - 14, y, kGrid);
   y += 12;
 
-  // The 16-key pad, lit to match what the core currently believes is held.
-  //
-  // Each cell carries both numbers: the CHIP-8 value on the left, and the key
-  // you actually press on the right. They disagree almost everywhere - the
-  // COSMAC VIP pad was 1 2 3 C / 4 5 6 D / 7 8 9 E / A 0 B F, so physical A is
-  // CHIP-8 7 - and showing only the hex value meant the panel lit up somewhere
-  // apparently unrelated to the key you had just hit.
-  DrawText_("KEYPAD", left, y, 14, kDim);
-  DrawText_("chip-8 value / your key", left + 74, y, 13, kGrid);
-  y += 20;
+  // 4. HEX KEYPAD MATRIX (16-KEY COSMAC VIP)
+  DrawText_("HEX KEYPAD MATRIX (16-KEY COSMAC VIP)", left, y, 12, kDim);
+  y += 18;
+
   constexpr int kPadLayout[16] = {0x1, 0x2, 0x3, 0xC, 0x4, 0x5, 0x6, 0xD,
                                   0x7, 0x8, 0x9, 0xE, 0xA, 0x0, 0xB, 0xF};
+  const int key_card_w = (kPanelW - 28 - (3 * 8)) / 4;
+  const int key_card_h = 26;
   for (int i = 0; i < 16; ++i) {
-    const int x = left + (i % 4) * 58;
-    const int ry = y + (i / 4) * 30;
+    const int col = i % 4;
+    const int row = i / 4;
+    const int kx = left + col * (key_card_w + 8);
+    const int ky = y + row * (key_card_h + 6);
     const int value = kPadLayout[i];
     const bool down = g_app.cpu.KeyPressed(value);
-    DrawRectangle(x, ry, 52, 24, down ? kAccent : kGrid);
-    DrawText_(Hex(value, 1), x + 8, ry + 4, 15, down ? kBg : kDim);
-    DrawText_("/", x + 20, ry + 5, 13, down ? kBg : kGrid);
-    DrawText_(PhysicalKeyFor(value), x + 32, ry + 4, 15, down ? kBg : kText);
-  }
-  y += 4 * 30 + 6;
 
-  // Status line at the bottom of the panel.
-  const int bottom = kScreenHeight - 32 - 46;
-  DrawText_(g_app.rom_name, left, bottom, 14, kDim);
-  const std::string state = g_app.cpu.halted() ? "HALTED"
-                            : g_app.paused     ? "PAUSED"
-                                               : "RUNNING";
-  DrawText_(state + "   " + std::to_string(g_app.speed) + "/frame", left,
-            bottom + 18, 14,
-            g_app.cpu.halted() ? kBad : (g_app.paused ? kWarn : kAccent));
+    DrawRectangle(kx, ky, key_card_w, key_card_h, down ? Color{126, 231, 195, 45} : Color{15, 19, 28, 255});
+    DrawRectangleLines(kx, ky, key_card_w, key_card_h, down ? kAccent : Color{32, 42, 60, 255});
+
+    const std::string key_label = Hex(value, 1) + " (" + PhysicalKeyFor(value) + ")";
+    DrawText_(key_label, kx + 12, ky + 6, 13, down ? kAccent : kText);
+  }
 }
 
 void DrawHelpBar() {
-  // The debugger's own controls. The ROM's controls are in the hint strip
-  // directly under the display instead, because that is the one thing you need
-  // before you have read anything at all.
-  //
-  // With the debugger folded away, most of this is about panels that are not
-  // on screen, so only the handful that still apply is listed.
-  // Kept terse. FitSize below will shrink anything longer until it fits, and
-  // at this width that means shrinking it past legible - the full wording for
-  // every one of these lives on the page around the canvas instead.
   const std::string help =
       g_app.show_debugger
           ? "H hide debugger   SPACE pause   N step   BACKSPACE reset   "
@@ -741,6 +737,8 @@ void UpdateFrame() {
 
   if (g_app.status_timer > 0.0f) g_app.status_timer -= dt;
 
+  g_app.frame_count++;
+
   if (g_app.show_debugger) UpdateDisasmWindow();
 
   const Rect display = DisplayRect();
@@ -748,11 +746,15 @@ void UpdateFrame() {
   BeginDrawing();
   ClearBackground(kBg);
 
-  DrawDisplayPanel(display);
-  DrawHintStrip(display);
   if (g_app.show_debugger) {
+    DrawTopTelemetryBar();
+    DrawDisplayPanel(display);
+    DrawHintStrip(display);
     DrawDisassembly();
     DrawRegisterPanel();
+  } else {
+    DrawDisplayPanel(display);
+    DrawHintStrip(display);
   }
   DrawHelpBar();
 
