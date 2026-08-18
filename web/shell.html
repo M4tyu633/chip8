@@ -12,10 +12,18 @@
       :root {
         --bg: #0e1117;
         --panel: #141821;
+        --panel-light: #1a202c;
         --line: #1c212d;
+        --line-bright: #2d3748;
         --text: #c6d0e0;
+        --text-bright: #f2f4f8;
         --dim: #6e7a91;
+        --dim-light: #99a1b3;
         --accent: #7ee7c3;
+        --accent-glow: rgba(126, 231, 195, 0.35);
+        --accent-soft: rgba(126, 231, 195, 0.12);
+        --warn: #f0b464;
+        --error: #e97070;
       }
 
       * {
@@ -24,10 +32,13 @@
 
       body {
         margin: 0;
-        padding: 24px 16px 40px;
-        background: var(--bg);
+        padding: 24px 16px 48px;
+        background-color: var(--bg);
+        background-image: 
+          radial-gradient(ellipse at 50% 0%, rgba(126, 231, 195, 0.06) 0%, transparent 60%),
+          url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.035'/%3E%3C/svg%3E");
         color: var(--text);
-        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "JetBrains Mono", monospace;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -38,34 +49,96 @@
       header {
         text-align: center;
         max-width: 900px;
+        padding: 0 10px;
       }
 
       h1 {
-        margin: 0 0 6px;
-        font-size: 20px;
-        letter-spacing: 0.04em;
+        margin: 0 0 8px;
+        font-size: 22px;
+        letter-spacing: 0.05em;
         color: var(--accent);
+        text-shadow: 0 0 20px var(--accent-glow);
       }
 
       header p {
         margin: 0;
         font-size: 13px;
-        line-height: 1.6;
-        color: var(--dim);
+        line-height: 1.65;
+        color: var(--dim-light);
       }
 
-      /* The canvas is a fixed 1280x720 internally. Scaling it with CSS keeps
-         the emulated pixels square on any screen without the C++ side needing
-         to know the window size. */
+      header strong {
+        color: var(--text-bright);
+      }
+
+      /* ROM Quick-Switch Tabs */
+      .rom-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: center;
+        align-items: center;
+        max-width: 1280px;
+        width: 100%;
+      }
+
+      .rom-tab {
+        font: inherit;
+        font-size: 13px;
+        padding: 7px 16px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(20, 24, 33, 0.9);
+        color: var(--dim-light);
+        cursor: pointer;
+        transition: all 0.15s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        user-select: none;
+      }
+
+      .rom-tab:hover {
+        border-color: var(--accent);
+        color: var(--text-bright);
+        box-shadow: 0 0 12px var(--accent-soft);
+      }
+
+      .rom-tab.active {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-weight: 600;
+        box-shadow: 0 0 16px rgba(126, 231, 195, 0.25), inset 0 0 6px rgba(126, 231, 195, 0.15);
+      }
+
+      /* CRT Console Bezel & Screen */
       #frame {
         width: 100%;
         max-width: 1280px;
         aspect-ratio: 16 / 9;
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 10px;
+        background: #090c12;
+        border: 3px solid #232b3c;
+        border-radius: 16px;
         overflow: hidden;
         position: relative;
+        box-shadow: 
+          0 0 0 1px #141923,
+          0 16px 44px -10px rgba(0, 0, 0, 0.9),
+          0 0 35px rgba(126, 231, 195, 0.12),
+          inset 0 0 32px rgba(0, 0, 0, 0.85);
+        transition: box-shadow 0.3s ease, border-color 0.3s ease;
+      }
+
+      #frame.crt-off {
+        box-shadow: 
+          0 0 0 1px #141923,
+          0 10px 30px rgba(0, 0, 0, 0.7);
+      }
+
+      #frame.crt-off .scanlines,
+      #frame.crt-off .crt-vignette {
+        display: none;
       }
 
       canvas {
@@ -74,6 +147,32 @@
         height: 100%;
         outline: none;
         image-rendering: pixelated;
+        position: relative;
+        z-index: 1;
+      }
+
+      .scanlines {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: repeating-linear-gradient(
+          to bottom,
+          transparent 0px,
+          transparent 2px,
+          rgba(0, 0, 0, 0.32) 2px,
+          rgba(0, 0, 0, 0.32) 4px
+        );
+        opacity: 0.75;
+        z-index: 2;
+      }
+
+      .crt-vignette {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: radial-gradient(circle at 50% 50%, transparent 60%, rgba(0, 0, 0, 0.45) 100%);
+        box-shadow: inset 0 0 45px rgba(0, 0, 0, 0.75);
+        z-index: 3;
       }
 
       #loading {
@@ -82,8 +181,10 @@
         display: grid;
         place-items: center;
         font-size: 14px;
-        color: var(--dim);
-        background: var(--panel);
+        font-weight: 600;
+        color: var(--accent);
+        background: #090c12;
+        z-index: 10;
         transition: opacity 0.3s;
       }
 
@@ -92,46 +193,270 @@
         pointer-events: none;
       }
 
+      /* Control Toolbar Panel */
       .controls {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: 10px;
         justify-content: center;
+        align-items: center;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 12px 18px;
+        max-width: 1280px;
+        width: 100%;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      }
+
+      .control-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
         align-items: center;
       }
 
       button,
       label.file {
         font: inherit;
-        font-size: 13px;
-        padding: 8px 16px;
-        border-radius: 999px;
-        border: 1px solid var(--line);
-        background: var(--panel);
+        font-size: 12px;
+        padding: 8px 14px;
+        border-radius: 8px;
+        border: 1px solid var(--line-bright);
+        background: linear-gradient(180deg, #1b212e 0%, #131720 100%);
         color: var(--text);
         cursor: pointer;
-        transition: border-color 0.15s, color 0.15s;
+        transition: all 0.15s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        user-select: none;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06);
       }
 
       button:hover,
       label.file:hover {
         border-color: var(--accent);
         color: var(--accent);
+        box-shadow: 0 0 12px var(--accent-soft);
+      }
+
+      button:active,
+      label.file:active {
+        transform: translateY(1px);
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.6);
+      }
+
+      button.active {
+        border-color: var(--accent);
+        background: linear-gradient(180deg, #162428 0%, #101c1f 100%);
+        color: var(--accent);
+        box-shadow: 0 0 12px var(--accent-soft), inset 0 0 6px rgba(126, 231, 195, 0.2);
       }
 
       input[type="file"] {
         display: none;
       }
 
-      /* Everything past the controls line is folded away. The page used to
-         open on five panels of prose under an already-busy canvas, which is
-         its own kind of unreadable. */
-      .guide {
+      /* Speed Control Slider */
+      .speed-control {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 5px 12px;
+        background: rgba(14, 17, 23, 0.75);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        font-size: 12px;
+      }
+
+      .speed-control label {
+        color: var(--dim-light);
+        white-space: nowrap;
+      }
+
+      .speed-control span {
+        color: var(--accent);
+        font-weight: 600;
+        min-width: 96px;
+      }
+
+      input[type="range"] {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 90px;
+        height: 6px;
+        background: #1c2331;
+        border-radius: 3px;
+        outline: none;
+        cursor: pointer;
+      }
+
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 8px var(--accent-glow);
+        cursor: pointer;
+        transition: transform 0.1s, box-shadow 0.1s;
+      }
+
+      input[type="range"]::-webkit-slider-thumb:hover {
+        transform: scale(1.2);
+        box-shadow: 0 0 12px var(--accent);
+      }
+
+      input[type="range"]::-moz-range-thumb {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--accent);
+        border: none;
+        box-shadow: 0 0 8px var(--accent-glow);
+        cursor: pointer;
+      }
+
+      /* Touch Keypad (Mobile Only) */
+      #touch-controls {
+        display: none;
         width: 100%;
-        max-width: 720px;
+        max-width: 360px;
+        margin: 8px auto 0;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      @media (pointer: coarse) {
+        #touch-controls {
+          display: flex;
+        }
+      }
+
+      .pad-modes {
+        display: flex;
+        gap: 6px;
+        justify-content: center;
+      }
+
+      .pad-mode-btn {
+        font-size: 11px;
+        padding: 5px 10px;
+        border-radius: 6px;
+      }
+
+      .pad-view {
+        display: none;
+      }
+
+      .pad-view.active {
+        display: block;
+      }
+
+      /* 4x4 Grid */
+      .pad-grid-4x4 {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+      }
+
+      /* D-Pad Layout */
+      .pad-grid-dpad {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+
+      .pad-grid-dpad .keycap {
+        height: 64px;
+        font-size: 15px;
+      }
+
+      /* 2P Pong Layout */
+      .pad-grid-pong {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+
+      .pong-col {
         display: flex;
         flex-direction: column;
         gap: 8px;
+      }
+
+      .pong-col .keycap {
+        height: 56px;
+        font-size: 13px;
+      }
+
+      /* 3D Keycaps */
+      .keycap {
+        font: inherit;
+        font-size: 14px;
+        font-weight: 700;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        padding: 10px 4px;
+        background: linear-gradient(180deg, #1d2330 0%, #131720 100%);
+        border: 1px solid #283244;
+        border-bottom: 3px solid #0d1017;
+        border-radius: 8px;
+        color: var(--text-bright);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08);
+        touch-action: manipulation;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+        cursor: pointer;
+        transition: transform 0.05s, box-shadow 0.05s, border-color 0.05s, background 0.05s;
+      }
+
+      .keycap .sub {
+        font-size: 10px;
+        font-weight: 400;
+        color: var(--dim);
+      }
+
+      .keycap:hover {
+        border-color: var(--accent);
+      }
+
+      .keycap:active,
+      .keycap.pressed {
+        transform: translateY(2px);
+        border-bottom-width: 1px;
+        border-color: var(--accent);
+        background: linear-gradient(180deg, #162428 0%, #101c1f 100%);
+        color: var(--accent);
+        box-shadow: 0 1px 2px rgba(0,0,0,0.6), 0 0 16px var(--accent-glow), inset 0 0 8px rgba(126, 231, 195, 0.3);
+      }
+
+      .keycap:active .sub,
+      .keycap.pressed .sub {
+        color: var(--accent);
+      }
+
+      /* Guide / Documentation */
+      .note {
+        font-size: 12px;
+        color: var(--dim);
+        text-align: center;
+        max-width: 760px;
+        line-height: 1.7;
+      }
+
+      .guide {
+        width: 100%;
+        max-width: 760px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
         margin-top: 8px;
       }
 
@@ -139,14 +464,32 @@
         background: var(--panel);
         border: 1px solid var(--line);
         border-radius: 10px;
+        overflow: hidden;
+        transition: border-color 0.2s, border-left-color 0.2s, box-shadow 0.2s;
+      }
+
+      details[open] {
+        border-color: var(--line-bright);
+        border-left: 3px solid var(--accent);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
       }
 
       summary {
         padding: 13px 18px;
         font-size: 13px;
+        font-weight: 600;
         color: var(--text);
         cursor: pointer;
         list-style: none;
+        display: flex;
+        align-items: center;
+        user-select: none;
+        transition: color 0.15s, background-color 0.15s;
+      }
+
+      summary:hover {
+        color: var(--accent);
+        background: rgba(126, 231, 195, 0.03);
       }
 
       summary::-webkit-details-marker {
@@ -157,7 +500,9 @@
         content: "+";
         color: var(--accent);
         display: inline-block;
-        width: 18px;
+        width: 20px;
+        font-size: 15px;
+        font-weight: 700;
       }
 
       details[open] summary::before {
@@ -166,17 +511,18 @@
 
       details[open] summary {
         border-bottom: 1px solid var(--line);
+        background: rgba(20, 24, 33, 0.95);
       }
 
       .body {
-        padding: 14px 18px 16px;
+        padding: 16px 20px;
       }
 
       .body p {
         margin: 0 0 10px;
         font-size: 13px;
         line-height: 1.65;
-        color: var(--dim);
+        color: var(--dim-light);
       }
 
       .body p:last-child {
@@ -187,66 +533,85 @@
         margin: 0;
         display: grid;
         grid-template-columns: auto 1fr;
-        gap: 8px 14px;
+        gap: 10px 16px;
         align-items: baseline;
         font-size: 13px;
       }
 
       dt {
         white-space: nowrap;
+        color: var(--text-bright);
       }
 
       dd {
         margin: 0;
-        color: var(--dim);
-        line-height: 1.5;
+        color: var(--dim-light);
+        line-height: 1.55;
       }
 
       kbd {
         font: inherit;
         font-size: 12px;
-        color: var(--text);
-        background: var(--bg);
-        border: 1px solid var(--line);
-        border-bottom-width: 2px;
+        color: var(--text-bright);
+        background: #0b0e14;
+        border: 1px solid var(--line-bright);
+        border-bottom: 2px solid #2d3748;
         border-radius: 4px;
         padding: 2px 7px;
         white-space: nowrap;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.5);
       }
 
-      .note {
+      code {
+        font: inherit;
+        color: var(--accent);
+        background: rgba(126, 231, 195, 0.08);
+        padding: 2px 5px;
+        border-radius: 4px;
         font-size: 12px;
-        color: var(--dim);
-        text-align: center;
-        max-width: 760px;
-        line-height: 1.7;
       }
 
       footer {
         font-size: 12px;
         color: var(--dim);
+        margin-top: 12px;
+        text-align: center;
       }
 
       footer a {
         color: var(--accent);
         text-decoration: none;
+        transition: color 0.15s;
+      }
+
+      footer a:hover {
+        text-decoration: underline;
       }
     </style>
   </head>
 
   <body>
     <header>
-      <h1>CHIP-8 &middot; emulator and debugger</h1>
+      <h1>CHIP-8 &middot; EMULATOR &amp; DEBUGGER</h1>
       <p>
         CHIP-8 is a tiny virtual machine from 1977 &mdash; 35 instructions, 4 KB
-        of memory and a 64&times;32 black-and-white screen. This is an
-        implementation of it written from scratch in C++, compiled to
-        WebAssembly, wrapped in a debugger that shows the machine working while
-        it runs. <strong>Click the screen, then press <kbd>A</kbd> and
-        <kbd>D</kbd> to play.</strong>
+        of memory and a 64&times;32 black-and-white screen. Written from scratch in C++,
+        compiled to WebAssembly, wrapped in a live visual debugger.
+        <strong>Click the screen, then press <kbd>A</kbd> and <kbd>D</kbd> to play.</strong>
       </p>
     </header>
 
+    <!-- ROM Quick-Switch Tabs -->
+    <div class="rom-tabs" role="tablist" aria-label="Bundled ROMs">
+      <button class="rom-tab active" type="button" data-rom-index="0" role="tab" aria-selected="true">🧱 Brix</button>
+      <button class="rom-tab" type="button" data-rom-index="1" role="tab" aria-selected="false">🏓 Pong</button>
+      <button class="rom-tab" type="button" data-rom-index="2" role="tab" aria-selected="false">🎯 Catch</button>
+      <button class="rom-tab" type="button" data-rom-index="3" role="tab" aria-selected="false">⚾ Bounce</button>
+      <button class="rom-tab" type="button" data-rom-index="4" role="tab" aria-selected="false">🔢 Counter</button>
+      <button class="rom-tab" type="button" data-rom-index="5" role="tab" aria-selected="false">⌨️ Keypad</button>
+    </div>
+
+    <!-- CRT Monitor Frame -->
     <div id="frame">
       <canvas
         id="canvas"
@@ -255,25 +620,91 @@
         tabindex="0"
         oncontextmenu="event.preventDefault()"
       ></canvas>
+      <div class="scanlines" aria-hidden="true"></div>
+      <div class="crt-vignette" aria-hidden="true"></div>
       <div id="loading">loading WebAssembly&hellip;</div>
     </div>
 
+    <!-- Controls Toolbar -->
     <div class="controls">
-      <button id="btn-pause" type="button">Pause / resume &middot; Space</button>
-      <button id="btn-next" type="button">Next ROM &middot; Tab</button>
-      <button id="btn-reset" type="button">Reset &middot; Backspace</button>
-      <button id="btn-debug" type="button">Show debugger &middot; H</button>
-      <label class="file">
-        Load a .ch8 file
-        <input id="rom-input" type="file" accept=".ch8,.c8,.rom,application/octet-stream" />
-      </label>
+      <div class="control-group">
+        <button id="btn-pause" type="button">▶⏸ Pause &middot; Space</button>
+        <button id="btn-next" type="button">Next ROM &middot; Tab</button>
+        <button id="btn-reset" type="button">⟲ Reset &middot; Backspace</button>
+        <button id="btn-debug" type="button">🔍 Show debugger &middot; H</button>
+        <label class="file">
+          📁 Load .ch8
+          <input id="rom-input" type="file" accept=".ch8,.c8,.rom,application/octet-stream" />
+        </label>
+      </div>
+
+      <div class="control-group">
+        <button id="btn-mute" type="button">🔊 Mute</button>
+        <button id="btn-crt" type="button" class="active">📺 CRT FX: ON</button>
+        
+        <div class="speed-control">
+          <label for="speed-slider">Speed:</label>
+          <input id="speed-slider" type="range" min="1" max="10" step="1" value="2" />
+          <span id="speed-val">~1.6&times; (11 IPF)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Touch Keypad (Mobile Only) -->
+    <div id="touch-controls">
+      <div class="pad-modes">
+        <button type="button" class="pad-mode-btn active" data-pad-mode="full">Full Pad</button>
+        <button type="button" class="pad-mode-btn" data-pad-mode="dpad">D-Pad</button>
+        <button type="button" class="pad-mode-btn" data-pad-mode="pong">2P Pong</button>
+      </div>
+
+      <!-- Full 4x4 Pad -->
+      <div id="pad-full" class="pad-view pad-grid-4x4 active">
+        <button class="keycap" type="button" data-key="49"><span>1</span><span class="sub">1</span></button>
+        <button class="keycap" type="button" data-key="50"><span>2</span><span class="sub">2</span></button>
+        <button class="keycap" type="button" data-key="51"><span>3</span><span class="sub">3</span></button>
+        <button class="keycap" type="button" data-key="52"><span>C</span><span class="sub">4</span></button>
+
+        <button class="keycap" type="button" data-key="81"><span>4</span><span class="sub">Q</span></button>
+        <button class="keycap" type="button" data-key="87"><span>5</span><span class="sub">W</span></button>
+        <button class="keycap" type="button" data-key="69"><span>6</span><span class="sub">E</span></button>
+        <button class="keycap" type="button" data-key="82"><span>D</span><span class="sub">R</span></button>
+
+        <button class="keycap" type="button" data-key="65"><span>7</span><span class="sub">A</span></button>
+        <button class="keycap" type="button" data-key="83"><span>8</span><span class="sub">S</span></button>
+        <button class="keycap" type="button" data-key="68"><span>9</span><span class="sub">D</span></button>
+        <button class="keycap" type="button" data-key="70"><span>E</span><span class="sub">F</span></button>
+
+        <button class="keycap" type="button" data-key="90"><span>A</span><span class="sub">Z</span></button>
+        <button class="keycap" type="button" data-key="88"><span>0</span><span class="sub">X</span></button>
+        <button class="keycap" type="button" data-key="67"><span>B</span><span class="sub">C</span></button>
+        <button class="keycap" type="button" data-key="86"><span>F</span><span class="sub">V</span></button>
+      </div>
+
+      <!-- D-Pad -->
+      <div id="pad-dpad" class="pad-view pad-grid-dpad">
+        <button class="keycap" type="button" data-key="65"><span>◀ LEFT</span><span class="sub">Key A</span></button>
+        <button class="keycap" type="button" data-key="68"><span>RIGHT ▶</span><span class="sub">Key D</span></button>
+      </div>
+
+      <!-- 2P Pong -->
+      <div id="pad-pong" class="pad-view pad-grid-pong">
+        <div class="pong-col">
+          <button class="keycap" type="button" data-key="49"><span>P1 ▲ UP</span><span class="sub">Key 1</span></button>
+          <button class="keycap" type="button" data-key="81"><span>P1 ▼ DOWN</span><span class="sub">Key Q</span></button>
+        </div>
+        <div class="pong-col">
+          <button class="keycap" type="button" data-key="52"><span>P2 ▲ UP</span><span class="sub">Key 4</span></button>
+          <button class="keycap" type="button" data-key="82"><span>P2 ▼ DOWN</span><span class="sub">Key R</span></button>
+        </div>
+      </div>
     </div>
 
     <p class="note">
-      The keyboard goes to the screen only while it has focus &mdash; click it
-      once if nothing responds.
+      The keyboard goes to the screen only while it has focus &mdash; click it once if nothing responds.
     </p>
 
+    <!-- Guide / Documentation -->
     <div class="guide">
       <details>
         <summary>The six ROMs, and what each one is</summary>
@@ -397,9 +828,62 @@
     <script>
       const canvas = document.getElementById("canvas");
 
-      // Emscripten looks for this object. Keeping the keyboard scoped to the
-      // canvas stops Space and the arrow keys from scrolling the page while
-      // the emulator has focus.
+      // AudioContext interception for volume mute toggle
+      let isMuted = false;
+      const audioContexts = [];
+      const OrigAudioContext = window.AudioContext || window.webkitAudioContext;
+      if (OrigAudioContext) {
+        window.AudioContext = class extends OrigAudioContext {
+          constructor(...args) {
+            super(...args);
+            audioContexts.push(this);
+            if (isMuted) {
+              try { this.suspend(); } catch (e) {}
+            }
+          }
+        };
+        if (window.webkitAudioContext) {
+          window.webkitAudioContext = window.AudioContext;
+        }
+      }
+
+      function getAllAudioContexts() {
+        const list = [...audioContexts];
+        if (window.Module && Module.SDL2 && Module.SDL2.audioContext && !list.includes(Module.SDL2.audioContext)) {
+          list.push(Module.SDL2.audioContext);
+        }
+        if (typeof SDL2 !== "undefined" && SDL2.audioContext && !list.includes(SDL2.audioContext)) {
+          list.push(SDL2.audioContext);
+        }
+        return list;
+      }
+
+      function updateMuteState() {
+        const btn = document.getElementById("btn-mute");
+        if (btn) {
+          btn.innerHTML = isMuted ? "🔇 Unmute" : "🔊 Mute";
+          btn.classList.toggle("active", isMuted);
+          btn.setAttribute("aria-label", isMuted ? "Unmute audio" : "Mute audio");
+        }
+        const contexts = getAllAudioContexts();
+        contexts.forEach((ctx) => {
+          try {
+            if (isMuted) {
+              if (ctx.state === "running") ctx.suspend();
+            } else {
+              if (ctx.state === "suspended") ctx.resume();
+            }
+          } catch (e) {}
+        });
+      }
+
+      function toggleMute() {
+        isMuted = !isMuted;
+        updateMuteState();
+      }
+      document.getElementById("btn-mute").onclick = toggleMute;
+
+      // Emscripten Module configuration
       var Module = {
         canvas: canvas,
         preRun: [],
@@ -407,6 +891,10 @@
           function () {
             document.getElementById("loading").classList.add("done");
             canvas.focus();
+            command(3);
+            debuggerShown = true;
+            setDebugLabel();
+            updateMuteState();
           },
         ],
         print: function (text) {
@@ -417,8 +905,7 @@
         },
       };
 
-      // Tab and Space would otherwise move focus and scroll the page. The
-      // emulator wants both.
+      // Space, Tab and Backspace navigation prevention
       canvas.addEventListener("keydown", function (event) {
         if ([" ", "Tab", "Backspace"].includes(event.key)) {
           event.preventDefault();
@@ -435,18 +922,14 @@
       }
 
       document.getElementById("btn-pause").onclick = () => command(0);
-      document.getElementById("btn-next").onclick = () => command(1);
       document.getElementById("btn-reset").onclick = () => command(2);
 
-      // The button label tracks the state, so it always says what pressing it
-      // will do. H does the same thing from the keyboard, so the label is
-      // corrected on any keypress rather than only on a click.
+      // Debugger toggle
       const debugButton = document.getElementById("btn-debug");
-      // Matches the C++ side, which opens with the debugger folded away.
       let debuggerShown = false;
       function setDebugLabel() {
         debugButton.textContent =
-          (debuggerShown ? "Hide debugger" : "Show debugger") + " · H";
+          (debuggerShown ? "🔍 Hide debugger" : "🔍 Show debugger") + " · H";
       }
       debugButton.onclick = () => {
         debuggerShown = !debuggerShown;
@@ -460,6 +943,130 @@
         }
       });
 
+      // Synthetic keyboard events for speed & touch keypad
+      function synthKey(type, keyCode) {
+        const event = new KeyboardEvent(type, {
+          bubbles: true,
+          cancelable: true,
+        });
+        Object.defineProperty(event, "keyCode", { get: () => keyCode });
+        Object.defineProperty(event, "which", { get: () => keyCode });
+        window.dispatchEvent(event);
+      }
+
+      function sendKeyPulse(keyCode) {
+        synthKey("keydown", keyCode);
+        synthKey("keyup", keyCode);
+      }
+
+      // ROM Quick-Switch Tabs
+      let currentRomIndex = 0;
+      const romTabs = document.querySelectorAll(".rom-tab");
+
+      function updateRomTabs() {
+        romTabs.forEach((tab, idx) => {
+          if (idx === currentRomIndex) {
+            tab.classList.add("active");
+            tab.setAttribute("aria-selected", "true");
+          } else {
+            tab.classList.remove("active");
+            tab.setAttribute("aria-selected", "false");
+          }
+        });
+      }
+
+      function switchToRom(targetIndex) {
+        if (targetIndex === currentRomIndex) return;
+        const steps = (targetIndex - currentRomIndex + 6) % 6;
+        currentRomIndex = targetIndex;
+        updateRomTabs();
+
+        let count = 0;
+        function stepCycle() {
+          if (count < steps) {
+            command(1);
+            count++;
+            if (count < steps) {
+              setTimeout(stepCycle, 50);
+            }
+          }
+        }
+        stepCycle();
+      }
+
+      romTabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+          const idx = parseInt(tab.dataset.romIndex, 10);
+          switchToRom(idx);
+        });
+      });
+
+      document.getElementById("btn-next").onclick = () => {
+        command(1);
+        currentRomIndex = (currentRomIndex + 1) % 6;
+        updateRomTabs();
+      };
+
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "Tab") {
+          currentRomIndex = (currentRomIndex + 1) % 6;
+          updateRomTabs();
+        }
+      });
+
+      // Speed Slider (1x = 7 IPF, 2x = 14 IPF ... 10x = 70 IPF)
+      let currentIPF = 11;
+      const speedSlider = document.getElementById("speed-slider");
+      const speedVal = document.getElementById("speed-val");
+
+      function updateSpeedDisplay(multiplier, ipf) {
+        speedVal.textContent = `${multiplier}\u00d7 (${ipf} IPF)`;
+      }
+
+      function setSpeedFromSlider(targetMultiplier) {
+        const targetIPF = targetMultiplier * 7;
+        const delta = targetIPF - currentIPF;
+        if (delta > 0) {
+          for (let i = 0; i < delta; i++) sendKeyPulse(221); // ]
+        } else if (delta < 0) {
+          for (let i = 0; i < Math.abs(delta); i++) sendKeyPulse(219); // [
+        }
+        currentIPF = targetIPF;
+        updateSpeedDisplay(targetMultiplier, targetIPF);
+      }
+
+      speedSlider.addEventListener("input", (e) => {
+        const val = parseInt(e.target.value, 10);
+        setSpeedFromSlider(val);
+      });
+
+      window.addEventListener("keydown", (e) => {
+        if (e.key === "[" || e.keyCode === 219) {
+          currentIPF = Math.max(1, currentIPF - 1);
+          const mult = (currentIPF / 7).toFixed(1).replace(/\.0$/, "");
+          updateSpeedDisplay(mult, currentIPF);
+          speedSlider.value = Math.round(currentIPF / 7);
+        } else if (e.key === "]" || e.keyCode === 221) {
+          currentIPF = Math.min(200, currentIPF + 1);
+          const mult = (currentIPF / 7).toFixed(1).replace(/\.0$/, "");
+          updateSpeedDisplay(mult, currentIPF);
+          speedSlider.value = Math.round(currentIPF / 7);
+        }
+      });
+
+      // CRT Effects Toggle
+      let crtEnabled = true;
+      const frameEl = document.getElementById("frame");
+      const crtBtn = document.getElementById("btn-crt");
+
+      crtBtn.onclick = () => {
+        crtEnabled = !crtEnabled;
+        frameEl.classList.toggle("crt-off", !crtEnabled);
+        crtBtn.classList.toggle("active", crtEnabled);
+        crtBtn.textContent = crtEnabled ? "📺 CRT FX: ON" : "📺 CRT FX: OFF";
+      };
+
+      // File Input ROM Loading
       document
         .getElementById("rom-input")
         .addEventListener("change", function (event) {
@@ -469,16 +1076,9 @@
           const reader = new FileReader();
           reader.onload = function () {
             const bytes = new Uint8Array(reader.result);
-
-            // The ROM has to live in the WASM heap for the C++ side to read
-            // it, so copy it across and free the block once the core has
-            // taken its own copy.
             const romPtr = Module._malloc(bytes.length);
             Module.HEAPU8.set(bytes, romPtr);
 
-            // The terminator is written as a byte rather than being embedded
-            // in the string: Emscripten minifies this shell, and a literal
-            // "\0" in the source survives only as a raw NUL character.
             const nameBytes = new TextEncoder().encode(file.name);
             const namePtr = Module._malloc(nameBytes.length + 1);
             Module.HEAPU8.set(nameBytes, namePtr);
@@ -488,10 +1088,59 @@
 
             Module._free(romPtr);
             Module._free(namePtr);
+            romTabs.forEach((tab) => tab.classList.remove("active"));
             canvas.focus();
           };
           reader.readAsArrayBuffer(file);
         });
+
+      // Touch Keypad Handling
+      function attachKeyButton(btn, keyCode) {
+        let held = false;
+        const press = (event) => {
+          event.preventDefault();
+          if (held) return;
+          held = true;
+          btn.classList.add("pressed");
+          synthKey("keydown", keyCode);
+        };
+        const release = (event) => {
+          event.preventDefault();
+          if (!held) return;
+          held = false;
+          btn.classList.remove("pressed");
+          synthKey("keyup", keyCode);
+        };
+        btn.addEventListener("pointerdown", press);
+        btn.addEventListener("pointerup", release);
+        btn.addEventListener("pointercancel", release);
+        btn.addEventListener("pointerleave", release);
+      }
+
+      document.querySelectorAll(".keycap").forEach((btn) => {
+        const keyCode = parseInt(btn.dataset.key, 10);
+        if (keyCode) attachKeyButton(btn, keyCode);
+      });
+
+      // Pad Layout Mode Selector
+      const modeButtons = document.querySelectorAll(".pad-mode-btn");
+      const padViews = document.querySelectorAll(".pad-view");
+
+      modeButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const mode = btn.dataset.padMode;
+          modeButtons.forEach((b) => b.classList.toggle("active", b === btn));
+          padViews.forEach((view) => {
+            view.classList.toggle("active", view.id === `pad-${mode}`);
+          });
+        });
+      });
+
+      const ALL_KEY_CODES = [49, 50, 51, 52, 81, 87, 69, 82, 65, 83, 68, 70, 90, 88, 67, 86];
+      window.addEventListener("blur", () => {
+        for (const kc of ALL_KEY_CODES) synthKey("keyup", kc);
+        document.querySelectorAll(".keycap").forEach((b) => b.classList.remove("pressed"));
+      });
     </script>
 
     {{{ SCRIPT }}}
